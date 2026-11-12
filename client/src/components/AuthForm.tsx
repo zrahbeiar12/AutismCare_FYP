@@ -118,7 +118,7 @@ export default function AuthForm() {
             },
           });
 
-          setInlineMessage({ type: 'success', text: res.data.message || "Account created! Verify your email." });
+          setInlineMessage({ type: 'success', text: res.data.message || "Account created! You can now log in." });
         } else {
           // Regular JSON request
           const res = await API.post("/auth/register", {
@@ -126,7 +126,7 @@ export default function AuthForm() {
             role: selectedRole.toLowerCase() // backend expects lowercase
           });
 
-          setInlineMessage({ type: 'success', text: res.data.message || "Account created! Verify your email." });
+          setInlineMessage({ type: 'success', text: res.data.message || "Account created! You can now log in." });
         }
 
         // Switch to login

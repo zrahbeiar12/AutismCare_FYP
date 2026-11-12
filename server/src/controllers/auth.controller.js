@@ -91,11 +91,7 @@ exports.register = async (req, res) => {
       documents
     });
 
-    // 5. Generate email verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    newUser.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-    newUser.emailVerificationExpires = getCurrentTimeMs() + 24 * 60 * 60 * 1000; // 24 hours
-
+    // Email verification is not required: no verification token is generated and no email is sent.
     await newUser.save();
 
     // Lab users require admin approval before they can login.
@@ -107,40 +103,18 @@ exports.register = async (req, res) => {
       );
     }
 
-    // 6. Prepare verification email (NON-CRITICAL)
-    // Note: Use the raw token in the URL, not the hashed one
-    const verificationUrl = buildClientAbsoluteUrl(`/verify-email/${verificationToken}`);
-
-    // Respond immediately; email send happens in background (never blocks user creation)
+    // Same response shape as before ({ message }); only the wording changed.
     if (normalizedRole === 'lab') {
-      res.status(201).json({
-        message:
-          'Lab account registered. Please verify your email; after that, admin approval is required before login.',
+      return res.status(201).json({
+        message: 'Lab account registered. Admin approval is required before login.',
       });
-    } else {
-      res.status(201).json({ message: 'User registered. Please check your email to verify your account.' });
     }
-
-    setImmediate(async () => {
-      try {
-        console.log('[SMTP] SMTP_CONNECTING...');
-        const resp = await sendEmail({
-          to: newUser.email,
-          subject: 'Verify your account',
-          text: `Welcome, ${firstName}! Please verify your email here: ${verificationUrl}`,
-        });
-        if (!resp?.ok) {
-          console.error('[SMTP] SMTP_FAILED', resp?.error || 'Email send failed');
-          return;
-        }
-        console.log('[SMTP] SMTP_CONNECTED');
-      } catch (emailErr) {
-        // Never throw / never crash the server.
-        console.error('SMTP_EMAIL_ERROR', emailErr?.message || String(emailErr));
-      }
-    });
-
-    return;
+    if (normalizedRole === 'clinician' || normalizedRole === 'therapist') {
+      return res.status(201).json({
+        message: 'User registered. Your account is pending admin approval before login.',
+      });
+    }
+    return res.status(201).json({ message: 'User registered successfully. You can now log in.' });
   } catch (err) {
     console.error("Registration Error:", err);
     res.status(500).json({ message: err.message || 'Server error during registration' });
@@ -170,11 +144,6 @@ exports.login = async (req, res) => {
     // Check password
     const isMatch = await user.comparePassword(normalizedPassword);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
-
-    // Check verification status
-    if (!user.isEmailVerified) {
-      return res.status(403).json({ message: 'Please verify your email before logging in.' });
-    }
 
     // Check approval status for professionals
     if ((user.role === 'clinician' || user.role === 'therapist') && user.approvalStatus !== 'active') {
