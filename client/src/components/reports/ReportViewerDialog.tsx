@@ -30,8 +30,12 @@ export function ReportViewerDialog({
   titleExtra?: string;
 }) {
   const childInfo = (payload?.childInfo as ChildInfo | undefined) || {};
+  const standardChild = (payload?.child as { name?: string; ageText?: string } | undefined) || {};
   const name =
-    (typeof childInfo.childName === 'string' && childInfo.childName) || titleExtra || 'Child';
+    (typeof standardChild.name === 'string' && standardChild.name) ||
+    (typeof childInfo.childName === 'string' && childInfo.childName) ||
+    titleExtra ||
+    'Child';
   const generatedAt = String(payload?.generatedAt || '');
 
   const typeLabel = reportTypeLabel(reportType);
@@ -45,7 +49,9 @@ export function ReportViewerDialog({
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{name}</span>
-            {typeof childInfo.age === 'number' ? (
+            {standardChild.ageText ? (
+              <span className="text-muted-foreground"> · {standardChild.ageText}</span>
+            ) : typeof childInfo.age === 'number' ? (
               <span className="text-muted-foreground"> · Age {childInfo.age}</span>
             ) : null}
             {generatedAt ? (

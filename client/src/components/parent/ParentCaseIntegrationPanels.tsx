@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ProtectedImage, ProtectedVideo } from '../ui/ProtectedMedia';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
@@ -16,13 +17,14 @@ import { integrationAPI, parentAPI, progressEngineAPI } from '../../api';
 import { CaseMessagingThread } from '../messaging/CaseMessagingThread';
 import { CaseLabRequestsPanel, type CaseLabRequestRow } from '../case/CaseLabRequestsPanel';
 import { CaseStatusBadge } from '../CaseStatusBadge';
-import { ClinicalAlertsPanel, DomainPerformanceBarChart, GoalClinicalCard, LowConfidenceBanner } from '../progress-clinical';
+import { ClinicalAlertsPanel, LowConfidenceBanner } from '../progress-clinical';
 
 type ParentCaseRow = {
   caseId: string;
   childId: string;
   childName?: string;
   status?: string;
+  fileNumber?: string | null;
 };
 
 type SessionRow = {
@@ -413,8 +415,10 @@ export function ParentCaseIntegrationPanels({ forcedCaseId, onCaseIdChange }: Pa
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Case reference</dt>
-                <dd className="font-mono text-sm text-foreground">{String(activeCase.caseId)}</dd>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">File number</dt>
+                <dd className="font-mono text-sm text-foreground">
+                  {activeCase.fileNumber || 'Given when your clinician registers the case'}
+                </dd>
               </div>
             </dl>
           </CardContent>
@@ -683,13 +687,13 @@ export function ParentCaseIntegrationPanels({ forcedCaseId, onCaseIdChange }: Pa
                           <p className="text-xs text-muted-foreground">Submitted {formatDate(ps.submittedAt)}</p>
                         ) : null}
                         {ps?.fileType === 'image' ? (
-                          <img
+                          <ProtectedImage
                             src={fileAbs}
                             alt=""
                             className="mt-2 max-h-40 rounded-md border object-contain"
                           />
                         ) : ps?.fileType === 'video' ? (
-                          <video
+                          <ProtectedVideo
                             src={fileAbs}
                             className="mt-2 max-h-40 w-full rounded-md border"
                             controls
@@ -757,7 +761,7 @@ export function ParentCaseIntegrationPanels({ forcedCaseId, onCaseIdChange }: Pa
               {parentEngineView.progressPercent != null ? (
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Program momentum (scaled from 0–5)</span>
+                    <span>Overall progress across therapy goals</span>
                     <span>{parentEngineView.progressPercent}%</span>
                   </div>
                   <Progress value={parentEngineView.progressPercent} className="h-3" />
@@ -799,28 +803,28 @@ export function ParentCaseIntegrationPanels({ forcedCaseId, onCaseIdChange }: Pa
                     ? 'Needs attention'
                     : 'Steady'}
               </Badge>
-              {parentEngineView.domainScores?.length ? (
-                <div className="pt-2">
-                  <p className="mb-2 text-sm font-medium text-foreground">Domain snapshot (0–5)</p>
-                  <div className="h-[200px]">
-                    <DomainPerformanceBarChart data={parentEngineView.domainScores} height={180} />
-                  </div>
-                </div>
-              ) : null}
               {parentEngineView.goalsBrief?.length ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {parentEngineView.goalsBrief.map((g) => (
-                    <GoalClinicalCard
-                      key={g.goalId || g.goalName}
-                      goal={{
-                        goalName: g.goalName,
-                        current: g.current,
-                        trend: g.trend,
-                        confidenceLabel: g.confidenceLabel,
-                        limitedDataUi: Boolean(g.limitedDataUi),
-                      }}
-                    />
-                  ))}
+                <div className="space-y-3 pt-2">
+                  <p className="text-sm font-medium text-foreground">Goals</p>
+                  {parentEngineView.goalsBrief.map((g) => {
+                    // Same 0–5 → % conversion the reports use, so the numbers match the PDF.
+                    const pct = g.current != null ? Math.round((Math.min(5, Math.max(0, Number(g.current))) / 5) * 100) : null;
+                    const trend = String(g.trend || '').toLowerCase();
+                    return (
+                      <div key={g.goalId || g.goalName} className="space-y-1">
+                        <div className="flex justify-between gap-3 text-sm">
+                          <span className="min-w-0 text-foreground">{g.goalName}</span>
+                          <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                            {pct != null ? `${pct}%` : '—'}
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                              {trend === 'improving' ? 'Improving' : trend === 'declining' ? 'Needs support' : 'Steady'}
+                            </span>
+                          </span>
+                        </div>
+                        <Progress value={pct ?? 0} className="h-2" />
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
               {parentEngineView.alertsParent?.length ? (

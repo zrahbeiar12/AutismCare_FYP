@@ -19,7 +19,7 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
-        value: 7d
+        value: 8h
       - key: CLIENT_URL
         sync: false
       - key: SERVER_URL

@@ -250,15 +250,18 @@ describe('Reports Advanced Integration', () => {
       .send({ caseId, reportType: 'session-summary' });
     expect(aliasTypeRes.statusCode).toBe(201);
     expect(aliasTypeRes.body.data.type).toBe('session');
-    expect(aliasTypeRes.body.data.data.sessionSummary.totalSessions).toBe(1);
+    expect(aliasTypeRes.body.data.data.schema).toBe('standard-v1');
+    expect(aliasTypeRes.body.data.data.stats.sessionsCompleted).toBe(1);
+    expect(aliasTypeRes.body.data.data.audience.recentSessions).toHaveLength(1);
 
     const therapyTypeRes = await request(app)
       .post('/api/reports/generate')
       .set(authHeader(therapistToken))
       .send({ caseId, reportType: 'therapy-report' });
     expect(therapyTypeRes.statusCode).toBe(201);
-    expect(Array.isArray(therapyTypeRes.body.data.data.therapyPlanSummary.shortTermGoals)).toBe(true);
-    expect(therapyTypeRes.body.data.data.progress.overallProgressPercent).toBeGreaterThanOrEqual(0);
+    expect(therapyTypeRes.body.data.data.audience.kind).toBe('therapy');
+    expect(therapyTypeRes.body.data.data.audience.activities[0].title).toBe('Picture requests');
+    expect(therapyTypeRes.body.data.data.goals.map((g) => g.name)).toEqual(['Use 2-word requests']);
 
     const duplicateRes = await request(app)
       .post('/api/reports/generate')
@@ -307,7 +310,8 @@ describe('Reports Advanced Integration', () => {
       .set(authHeader(parentToken));
     expect(parentViewOwnRes.statusCode).toBe(200);
     expect(parentViewOwnRes.body.data.type).toBe('parent');
-    expect(typeof parentViewOwnRes.body.data.data.progressSummary).toBe('string');
+    expect(typeof parentViewOwnRes.body.data.data.summary).toBe('string');
+    expect(parentViewOwnRes.body.data.data.audience.kind).toBe('parent');
 
     const parentViewClinicianRes = await request(app)
       .get(`/api/reports/view/${clinicianReportId}`)
@@ -341,6 +345,7 @@ describe('Reports Advanced Integration', () => {
     expect(insufficientDataRes.statusCode).toBe(201);
     expect(insufficientDataRes.body.data.type).toBe('progress');
     expect(insufficientDataRes.body.data.data.insufficientData).toBe(true);
-    expect(insufficientDataRes.body.data.data.progressSummary.overallProgressPercent).toBe(0);
+    expect(insufficientDataRes.body.data.data.stats.overallProgressPct).toBeNull();
+    expect(insufficientDataRes.body.data.data.stats.sessionsCompleted).toBe(0);
   });
 });

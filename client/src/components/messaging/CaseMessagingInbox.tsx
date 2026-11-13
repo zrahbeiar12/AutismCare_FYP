@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -16,7 +16,7 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react';
-import { messagingAPI } from '../../api';
+import { messagingAPI, parentAPI } from '../../api';
 import { toast } from 'sonner';
 import { cn } from '../ui/utils';
 import { AuthContext } from '../../context/AuthContext';
@@ -30,11 +30,18 @@ type ApiConversation = {
   parentId?: string;
   therapistId?: string;
   parentName?: string;
+  therapistName?: string;
   childName?: string;
   preview?: string;
   previewAt?: string;
   lastMessageAt?: string;
 };
+
+/** Show the other side of the thread: parents see their therapist, staff see the parent. */
+function counterpartName(c: ApiConversation, variant: MessagingInboxVariant) {
+  if (variant === 'parent') return c.therapistName ? `${c.therapistName} (therapist)` : 'Your therapist';
+  return c.parentName || 'Parent';
+}
 
 type ApiMessage = {
   _id: string;
@@ -101,6 +108,7 @@ function isOutgoing(
 }
 
 type ConversationListProps = {
+  variant: MessagingInboxVariant;
   conversations: ApiConversation[];
   filteredConversations: ApiConversation[];
   selected: ApiConversation | null;
@@ -124,6 +132,7 @@ function ConversationList({
   searchQuery,
   setSearchQuery,
   onSelectConversation,
+  variant,
 }: ConversationListProps) {
   return (
     <div
@@ -181,7 +190,7 @@ function ConversationList({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="truncate text-sm font-semibold text-foreground">{conv.parentName || 'Parent'}</h4>
+                      <h4 className="truncate text-sm font-semibold text-foreground">{counterpartName(conv, variant)}</h4>
                       <span className="shrink-0 text-xs text-muted-foreground">{formatListTime(lastAt)}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">Re: {conv.childName || 'Child'}</p>
@@ -261,7 +270,7 @@ function ChatArea({
           <User className="h-5 w-5 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
-          <h4 className="truncate text-sm font-semibold text-foreground">{selected.parentName || 'Parent'}</h4>
+          <h4 className="truncate text-sm font-semibold text-foreground">{counterpartName(selected, variant)}</h4>
           <p className="truncate text-xs text-muted-foreground">Re: {selected.childName || 'Child'}</p>
         </div>
         {caseLink ? (
@@ -409,12 +418,32 @@ export function CaseMessagingInbox({
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const parentThreadsEnsured = useRef(false);
   const loadConversations = useCallback(async () => {
     try {
       setListError(null);
       const { data: body } = await messagingAPI.listConversations();
       const raw = body?.data;
-      const list = Array.isArray(raw) ? raw : [];
+      let list = Array.isArray(raw) ? raw : [];
+      // Threads are created on first open. A parent whose child already has a therapist should not see an
+      // empty inbox, so open each case's thread (same call as Child Case) and list again. Cases without a
+      // therapist are rejected by the server and simply skipped.
+      if (variant === 'parent' && list.length === 0 && !parentThreadsEnsured.current) {
+        parentThreadsEnsured.current = true;
+        try {
+          const casesRes = await parentAPI.getCases();
+          const cases = (casesRes.data?.data || []) as Array<{ caseId?: string }>;
+          const opened = await Promise.allSettled(
+            cases.filter((c) => c.caseId).map((c) => messagingAPI.getOrCreateConversation(String(c.caseId)))
+          );
+          if (opened.some((r) => r.status === 'fulfilled')) {
+            const again = await messagingAPI.listConversations();
+            list = Array.isArray(again.data?.data) ? again.data.data : [];
+          }
+        } catch {
+          /* keep the empty state */
+        }
+      }
       setConversations(list as ApiConversation[]);
     } catch (e: unknown) {
       const ax = e as { response?: { data?: { message?: string } } };
@@ -423,7 +452,7 @@ export function CaseMessagingInbox({
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [variant]);
 
   useEffect(() => {
     void loadConversations();
@@ -547,6 +576,7 @@ export function CaseMessagingInbox({
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onSelectConversation={handleSelectConversation}
+              variant={variant}
             />
             <ChatArea
               selected={selected}

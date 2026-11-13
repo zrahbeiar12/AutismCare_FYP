@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import {
     FileText, Download, Clock, AlertCircle, FlaskConical, Eye,
     Baby, User, ChevronDown, ChevronUp, ShieldCheck, Calendar
@@ -242,7 +243,7 @@ export function ParentLabReports() {
                                                                     </p>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
-                                                                    <a
+                                                                    <ProtectedLink
                                                                         href={getFileUrl(report.fileUrl)}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
@@ -250,15 +251,15 @@ export function ParentLabReports() {
                                                                     >
                                                                         <Eye className="w-3.5 h-3.5" />
                                                                         View
-                                                                    </a>
-                                                                    <a
+                                                                    </ProtectedLink>
+                                                                    <ProtectedLink
                                                                         href={getFileUrl(report.fileUrl)}
                                                                         download={report.fileName}
                                                                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground bg-muted rounded-lg hover:bg-muted transition-colors border"
                                                                     >
                                                                         <Download className="w-3.5 h-3.5" />
                                                                         Download
-                                                                    </a>
+                                                                    </ProtectedLink>
                                                                 </div>
                                                             </div>
                                                         ))}

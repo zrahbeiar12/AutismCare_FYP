@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import {
     ArrowLeft, Upload, FileText, User, Stethoscope, Baby,
     Clock, CheckCircle, AlertCircle, X, FileUp
@@ -460,14 +461,14 @@ export function LabTestRequestDetail({ requestId, onBack }: LabTestRequestDetail
                                         )}
                                     </p>
                                 </div>
-                                <a
+                                <ProtectedLink
                                     href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:4000'}${report.fileUrl}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary/80"
                                 >
                                     View
-                                </a>
+                                </ProtectedLink>
                             </div>
                         ))}
                     </div>

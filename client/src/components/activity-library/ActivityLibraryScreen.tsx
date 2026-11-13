@@ -79,7 +79,8 @@ function ProcedureContent({ procedure }: { procedure?: string }) {
 }
 
 function isPlatformTemplate(a: ActivityTemplate) {
-  if (a.isPlatformTemplate === true) return true;
+  // The server states ownership explicitly; only fall back to createdBy for older payloads without the flag.
+  if (typeof a.isPlatformTemplate === 'boolean') return a.isPlatformTemplate;
   return a.createdBy == null || a.createdBy === '';
 }
 
@@ -104,6 +105,7 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   /** When the library is opened from the dashboard (no case route), therapist picks a case to assign. */
   const [assignCaseIdOverride, setAssignCaseIdOverride] = useState<string | null>(null);
+  const [assignChildName, setAssignChildName] = useState<string | null>(null);
   const [casePickOpen, setCasePickOpen] = useState(false);
   const [casePickLoading, setCasePickLoading] = useState(false);
   const [casePickOptions, setCasePickOptions] = useState<Array<{ caseId: string; childName: string }>>([]);
@@ -208,8 +210,9 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
     }
   };
 
-  const beginAssignFlow = (a: ActivityTemplate, cid: string) => {
+  const beginAssignFlow = (a: ActivityTemplate, cid: string, childName?: string) => {
     setAssignActivity(a);
+    setAssignChildName(childName || casePickOptions.find((o) => o.caseId === cid)?.childName || null);
     if (!caseId) setAssignCaseIdOverride(cid);
     setAssignTarget('home');
     const d = new Date();
@@ -233,13 +236,21 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
     setCasePickOptions([]);
     try {
       const res = await therapistAPI.getDashboardSummary();
-      const rows = (res.data?.data?.assignedCases || []) as Array<{ caseId?: string; childName?: string }>;
+      const rows = (res.data?.data?.assignedCases || []) as Array<{
+        caseId?: string;
+        childName?: string;
+        referralStatus?: string;
+      }>;
+      // Only cases where this therapist has started therapy can receive activities (the server rejects others),
+      // and a case can appear once per referral, so de-duplicate by case.
+      const seen = new Set<string>();
       const opts = rows
-        .filter((r) => r?.caseId)
+        .filter((r) => r?.caseId && r.referralStatus === 'in-progress')
+        .filter((r) => (seen.has(String(r.caseId)) ? false : (seen.add(String(r.caseId)), true)))
         .map((r) => ({ caseId: String(r.caseId), childName: String(r.childName || 'Child') }));
       setCasePickOptions(opts);
       if (opts.length === 0) {
-        toast.error('No assigned cases yet. Accept a referral in Assigned Cases, then try again.');
+        toast.error('No cases in active therapy yet. Start therapy from Assigned Cases, then try again.');
         setCasePickOpen(false);
         setCasePickForActivity(null);
         return;
@@ -247,7 +258,7 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
       if (opts.length === 1) {
         setAssignCaseIdOverride(opts[0].caseId);
         setCasePickOpen(false);
-        beginAssignFlow(a, opts[0].caseId);
+        beginAssignFlow(a, opts[0].caseId, opts[0].childName);
         setCasePickForActivity(null);
       }
     } catch {
@@ -582,7 +593,7 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
                         setAssignCaseIdOverride(opt.caseId);
                         setCasePickOpen(false);
                         setCasePickForActivity(null);
-                        beginAssignFlow(act, opt.caseId);
+                        beginAssignFlow(act, opt.caseId, opt.childName);
                       }}
                     >
                       <span className="font-medium text-foreground">{opt.childName}</span>
@@ -620,6 +631,11 @@ export function ActivityLibraryScreen({ caseId, onAssignSuccess }: Props) {
           </DialogHeader>
           {assignActivity ? (
             <p className="text-sm font-medium text-foreground">{assignActivity.name}</p>
+          ) : null}
+          {assignChildName ? (
+            <p className="text-sm text-muted-foreground">
+              For <span className="font-semibold text-foreground">{assignChildName}</span>
+            </p>
           ) : null}
           <RadioGroup
             value={assignTarget}

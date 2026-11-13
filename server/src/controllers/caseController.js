@@ -3,6 +3,9 @@ const { ChildCase, CASE_LIFECYCLE_STATUS } = require('../models/ChildCase');
 const { User } = require('../models/User');
 const { Appointment } = require('../models/Appointment');
 const { getLabRequestsForCase } = require('../utils/labCaseIntegration');
+const { loadLatestScreeningsForChildren } = require('../services/childCase.service');
+const { assignCaseFileNumber } = require('../services/caseFileNumberService');
+const { calculateAgeInMonths } = require('../utils/ageUtils');
 
 function normalizeCaseStatus(value) {
   if (value == null) return '';
@@ -34,55 +37,70 @@ exports.getCases = async (req, res) => {
     const clinicianId = req.user._id;
     const { riskLevel, status } = req.query;
 
-    // Clinicians can VIEW downstream cases for continuity (read-only),
-    // but write actions remain state-gated elsewhere.
-    const clinicianAllowed = ['REVIEW', 'DIAGNOSIS', 'DIAGNOSIS_READY', 'THERAPY', 'THERAPY_ACTIVE', 'MONITORING'];
-    // IMPORTANT: do NOT filter by status in Mongo query.
-    // Some legacy records can have non-enum casing (e.g., "Review"), which would disappear
-    // if we use `$in` matching. We normalize in JS after fetch.
-    const filter = { clinicianId };
-    if (riskLevel && ['low', 'medium', 'high', 'unknown'].includes(String(riskLevel))) {
-      filter.riskLevel = riskLevel;
-    }
-
-    const allCases = await ChildCase.find(filter).sort({ updatedAt: -1 }).lean();
+    // Every case assigned to this clinician belongs in their list, whatever its stage (write actions stay
+    // state-gated elsewhere). NEW/SCREENING used to be excluded, which hid cases created by the clinician
+    // or booked before the parent finished screening.
+    // IMPORTANT: do NOT filter by status in the Mongo query: legacy records can have non-enum casing
+    // (e.g. "Review"), so status is normalized in JS after fetch.
+    const allCases = await ChildCase.find({ clinicianId }).sort({ updatedAt: -1 }).lean();
 
     const requestedStatus = status ? normalizeCaseStatus(status) : null;
-    const cases = allCases.filter((c) => {
+    const requestedRisk =
+      riskLevel && ['low', 'medium', 'high', 'unknown'].includes(String(riskLevel)) ? String(riskLevel) : null;
+
+    const statusMatched = allCases.filter((c) => {
       const st = normalizeCaseStatus(c.status);
-      if (!clinicianAllowed.includes(st)) return false;
+      if (!CASE_LIFECYCLE_STATUS.includes(st)) return false;
       if (requestedStatus && requestedStatus !== 'ALL' && st !== requestedStatus) return false;
       return true;
     });
 
-    const parentIds = [...new Set(cases.map((c) => c.parentId.toString()))];
-    const parents = await User.find({ _id: { $in: parentIds } })
-      .select('firstName lastName email children')
-      .lean();
-
+    const parentIds = [...new Set(statusMatched.map((c) => c.parentId.toString()))];
+    const [parents, screeningsByChild] = await Promise.all([
+      User.find({ _id: { $in: parentIds } }).select('firstName lastName email children').lean(),
+      // Results are read from the submissions themselves (not the snapshot stored on the case), so the list is
+      // correct even for cases whose snapshot predates the latest questionnaire.
+      loadLatestScreeningsForChildren(statusMatched.map((c) => c.childId)),
+    ]);
     const parentMap = new Map(parents.map((p) => [p._id.toString(), p]));
 
-    const data = cases.map((c) => {
+    const data = [];
+    for (const c of statusMatched) {
       const p = parentMap.get(c.parentId.toString());
-      let childName = 'Child';
-      if (p && p.children && c.childId) {
-        const sub = (p.children || []).find((ch) => ch._id && ch._id.toString() === c.childId.toString());
-        if (sub) childName = childDisplayName(sub);
-      }
-      const parentName = p ? `${p.firstName || ''} ${p.lastName || ''}`.trim() : '—';
+      const sub =
+        p && Array.isArray(p.children) && c.childId
+          ? p.children.find((ch) => ch._id && ch._id.toString() === c.childId.toString())
+          : null;
+      const screenings = screeningsByChild.get(String(c.childId)) || { mchat: null, asq3: null, overallRisk: 'unknown' };
+      const hasScreening = Boolean(screenings.mchat || screenings.asq3);
+      // Risk shown and filtered on = combined latest screening risk; fall back to the stored value only when
+      // there is no screening on file (e.g. legacy cases).
+      const risk = hasScreening ? screenings.overallRisk : c.riskLevel || 'unknown';
+      if (requestedRisk && risk !== requestedRisk) continue;
 
-      return {
+      const dob = sub?.dateOfBirth || null;
+      data.push({
         _id: c._id,
         childId: c.childId,
-        childName,
-        parentName,
+        childName: sub ? childDisplayName(sub) : 'Child',
+        child: sub
+          ? {
+              dateOfBirth: dob,
+              ageMonths: dob ? calculateAgeInMonths(dob) : null,
+              gender: sub.gender || null,
+            }
+          : null,
+        parentName: p ? `${p.firstName || ''} ${p.lastName || ''}`.trim() : '—',
         parentEmail: p?.email || null,
-        riskLevel: c.riskLevel,
+        riskLevel: risk,
+        screenings: { mchat: screenings.mchat, asq3: screenings.asq3 },
         status: normalizeCaseStatus(c.status) || c.status,
+        fileNumber: c.fileNumber || null,
+        mrNumber: c.mrNumber || null,
         updatedAt: c.updatedAt,
         createdAt: c.createdAt,
-      };
-    });
+      });
+    }
 
     res.status(200).json({ success: true, data });
   } catch (error) {
@@ -193,7 +211,8 @@ exports.createCase = async (req, res) => {
       if (!doc.clinicianId) {
         doc.clinicianId = clinicianId;
         await doc.save();
-        return res.status(201).json({ success: true, message: 'Case assigned', data: doc });
+        const numbered = await assignCaseFileNumber(doc._id, { clinicianId });
+        return res.status(201).json({ success: true, message: 'Case assigned', data: numbered || doc });
       }
       return res.status(409).json({ success: false, message: 'Case already exists', data: doc });
     }
@@ -214,7 +233,8 @@ exports.createCase = async (req, res) => {
       ],
     });
 
-    return res.status(201).json({ success: true, message: 'Case created', data: doc });
+    const numbered = await assignCaseFileNumber(doc._id, { clinicianId });
+    return res.status(201).json({ success: true, message: 'Case created', data: numbered || doc });
   } catch (error) {
     console.error('createCase:', error);
     return res.status(500).json({ success: false, message: 'Failed to create case' });
@@ -252,9 +272,43 @@ exports.createFromAppointment = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return res.status(200).json({ success: true, message: 'Case linked', data: doc });
+    const numbered = await assignCaseFileNumber(doc._id, { clinicianId });
+    return res.status(200).json({ success: true, message: 'Case linked', data: numbered || doc });
   } catch (error) {
     console.error('createFromAppointment:', error);
     return res.status(500).json({ success: false, message: 'Failed to link case to appointment' });
+  }
+};
+
+/**
+ * PATCH /api/cases/:id/mr-number — set the hospital's Medical Record number on a case (clinician who owns it).
+ * Unique within the case's organisation; empty value clears it.
+ */
+exports.updateMrNumber = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid case id' });
+    }
+    const raw = String(req.body?.mrNumber ?? '').trim();
+    if (raw.length > 40 || (raw && !/^[A-Za-z0-9][A-Za-z0-9\-\/ .]*$/.test(raw))) {
+      return res.status(400).json({ success: false, message: 'MR number may use letters, digits, spaces, "-", "/" and "." (max 40)' });
+    }
+    const doc = await ChildCase.findOne({ _id: id, clinicianId: req.user._id });
+    if (!doc) return res.status(404).json({ success: false, message: 'Case not found' });
+    if (!doc.fileNumber) await assignCaseFileNumber(doc._id, { clinicianId: req.user._id });
+    const update = raw ? { $set: { mrNumber: raw } } : { $unset: { mrNumber: 1 } };
+    try {
+      const saved = await ChildCase.findByIdAndUpdate(doc._id, update, { new: true }).lean();
+      return res.status(200).json({ success: true, data: { fileNumber: saved.fileNumber, mrNumber: saved.mrNumber || null } });
+    } catch (err) {
+      if (err && err.code === 11000) {
+        return res.status(409).json({ success: false, message: 'This MR number is already used for another child in your organisation' });
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error('updateMrNumber:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update MR number' });
   }
 };

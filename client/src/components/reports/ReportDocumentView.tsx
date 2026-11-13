@@ -40,6 +40,7 @@ import {
   LowConfidenceBanner,
   trendIcon,
 } from '../progress-clinical';
+import { StandardReportView, isStandardReport } from './StandardReportView';
 
 type AnyRecord = Record<string, any>;
 
@@ -120,7 +121,7 @@ function normalizeDomainData(
         status: row.status || row.trend,
       };
     })
-    .filter((item): item is { name: string; score: number; status?: string } => Boolean(item));
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
 function normalizeGoalRows(data: AnyRecord): GoalRow[] {
@@ -920,6 +921,10 @@ export function ReportDocumentView({
   reportType: string;
   payload: Record<string, unknown>;
 }) {
+  // Reports generated since the unified format: one layout and one set of numbers for every role.
+  if (isStandardReport(payload)) {
+    return <StandardReportView data={payload} />;
+  }
   if (payload?.insufficientData && reportType !== 'integrated') {
     return <InsufficientDataBanner />;
   }

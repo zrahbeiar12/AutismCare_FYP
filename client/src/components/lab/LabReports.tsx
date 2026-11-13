@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import { FileText, Download, Clock, CheckCircle, AlertCircle, Search } from 'lucide-react';
 import { labAPI } from '../../api';
 
@@ -132,7 +133,7 @@ export function LabReports() {
                             </div>
 
                             {/* Actions */}
-                            <a
+                            <ProtectedLink
                                 href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:4000'}${report.fileUrl}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -140,7 +141,7 @@ export function LabReports() {
                             >
                                 <Download className="w-4 h-4" />
                                 View / Download
-                            </a>
+                            </ProtectedLink>
                         </div>
                     ))}
                 </div>

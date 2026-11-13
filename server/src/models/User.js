@@ -42,6 +42,8 @@ const UserSchema = new Schema({
   isEmailVerified: { type: Boolean, default: false },
   emailVerificationToken: String,
   emailVerificationExpires: Date,
+  /** Hospital/clinic this staff member works for (parents have none; their cases carry the organisation). */
+  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
 }, {
   timestamps: true,
   discriminatorKey: 'role' // This connects the sub-schemas

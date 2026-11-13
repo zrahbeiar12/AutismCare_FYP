@@ -1,70 +1,31 @@
-const { getCurrentTime, getCurrentTimeMs } = require('../utils/time.js');
+const { getCurrentTimeMs } = require('../utils/time.js');
 /**
- * Auto-generated therapy reports (monthly, IEP, clinician, parent) from plan + sessions + assignments + analytics.
- * No manual editing — data is derived from existing collections only.
+ * Therapy reports. Every report type is built by services/standardReport.js from ONE canonical data set
+ * (loadCaseProgressInputs + one progress-engine run), so parents, clinicians and therapists see the same
+ * numbers for the same child. Only the audience section differs by type. No manual editing.
  */
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const { ChildCase } = require('../models/ChildCase');
 const { User } = require('../models/User');
-const TherapyPlan = require('../models/TherapyPlan');
-const SessionLog = require('../models/SessionLog');
-const { HomeAssignment } = require('../models/HomeAssignment');
 const { ClinicalEvaluation } = require('../models/ClinicalEvaluation');
 const { Report, REPORT_TYPES } = require('../models/Report');
 const { assertTherapistCaseAccess } = require('../utils/therapistCaseAccess');
 const { assertUserCaseAccess } = require('../utils/caseAccess');
-const { buildUnifiedCaseAnalytics } = require('../services/caseAnalyticsSnapshot');
-const { buildProgressEnginePayload } = require('../services/progressEngine');
-const { buildIntegratedTherapyReport } = require('../services/reportGenerator');
-const { writeIntegratedReportPdf, writeGenericReportPdf } = require('../services/reportPdfService');
-const { parseResponseScore } = require('../utils/sessionResponseScore');
+const { buildProgressEnginePayload, loadCaseProgressInputs } = require('../services/progressEngine');
+const { buildStandardReport, STANDARD_REPORT_SCHEMA } = require('../services/standardReport');
+const { loadLatestScreeningsForChildren } = require('../services/childCase.service');
+const {
+  writeStandardReportPdf,
+  writeIntegratedReportPdf,
+  writeGenericReportPdf,
+} = require('../services/reportPdfService');
 const TherapyCase = require('../models/TherapyCase');
 const { THERAPY_STATUS } = require('../constants/workflowEnums');
 
-function ageFromDob(dob) {
-  if (!dob) return null;
-  const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return null;
-  const diff = getCurrentTimeMs() - d.getTime();
-  return Math.max(0, Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000)));
-}
-
-function mean(arr) {
-  if (!arr.length) return 0;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
-async function loadChildDisplay(caseDoc) {
-  const parent = await User.findById(caseDoc.parentId).select('firstName lastName children').lean();
-  let childName = 'Child';
-  let age = null;
-  if (parent && Array.isArray(parent.children)) {
-    const found = parent.children.find((c) => c && c._id && c._id.toString() === caseDoc.childId.toString());
-    if (found) {
-      childName = `${found.firstName || ''} ${found.lastName || ''}`.trim() || 'Child';
-      age = ageFromDob(found.dateOfBirth);
-    }
-  }
-  return {
-    childName,
-    age,
-    caseStatus: caseDoc.status || '',
-    riskLevel: caseDoc.riskLevel || '',
-  };
-}
-
-function sessionScores(sessions) {
-  return sessions
-    .map((s) => parseResponseScore(s.childResponse))
-    .filter((v) => typeof v === 'number' && !Number.isNaN(v));
-}
-
-function insufficientCore(plan, sessions, assignments) {
-  const hasPlan = plan && (plan.shortTermGoals?.length > 0 || plan.goals?.length > 0 || plan.longTermGoal);
-  return !hasPlan && sessions.length === 0 && assignments.length === 0;
-}
+/** A second request for the same report type within this window returns the first report instead of a copy. */
+const DUPLICATE_WINDOW_MS = 45 * 1000;
 
 function normalizeReportType(input) {
   const raw = String(input || '').trim().toLowerCase();
@@ -77,315 +38,80 @@ function normalizeReportType(input) {
   return raw;
 }
 
-function buildMonthlyPayload(ctx) {
-  const {
-    childInfo,
+/** Shared gate: the requesting therapist must have an ACTIVE/COMPLETED therapy case for this child case. */
+async function assertReportGenerationAllowed(req, caseId) {
+  const therapistId = req.user._id;
+  const access = await assertTherapistCaseAccess(req, caseId, therapistId);
+  if (!access.ok) {
+    return { ok: false, status: access.status || 403, body: { success: false, message: access.message || 'Access denied' } };
+  }
+  const therapyCase = await TherapyCase.findOne({
+    caseId,
+    therapistId,
+    status: { $in: [THERAPY_STATUS.ACTIVE, THERAPY_STATUS.COMPLETED] },
+  })
+    .select('_id')
+    .lean();
+  if (!therapyCase) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        success: false,
+        message: 'Report generation not allowed: therapy must be ACTIVE or COMPLETED.',
+        errorCode: 'INVALID_THERAPY_STATE',
+      },
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Build the standard report payload for a case from the canonical data set.
+ * @returns {Promise<{ data: object, sessionsCount: number } | null>} null when the case does not exist
+ */
+async function buildReportForCase(caseId, type) {
+  const caseDoc = await ChildCase.findById(caseId).lean();
+  if (!caseDoc) return null;
+
+  const [{ plan, therapistId, sessions, assignments }, parent, evaluation, screeningsByChild] = await Promise.all([
+    loadCaseProgressInputs(caseId),
+    User.findById(caseDoc.parentId).select('firstName lastName children').lean(),
+    ClinicalEvaluation.findOne({ caseId, status: 'FINALIZED' }).sort({ createdAt: -1 }).lean(),
+    loadLatestScreeningsForChildren([caseDoc.childId]),
+  ]);
+
+  const child =
+    parent && Array.isArray(parent.children)
+      ? parent.children.find((c) => c && c._id && String(c._id) === String(caseDoc.childId)) || null
+      : null;
+
+  let therapist =
+    plan?.therapistId && typeof plan.therapistId === 'object' && plan.therapistId.firstName ? plan.therapistId : null;
+  const therapistLookupId = therapistId || caseDoc.therapistId;
+  if (!therapist && therapistLookupId) {
+    therapist = await User.findById(therapistLookupId).select('firstName lastName specialization').lean();
+  }
+
+  const engine = buildProgressEnginePayload({ caseId: String(caseId), plan, sessions, assignments });
+  const data = buildStandardReport(type, {
+    caseDoc,
+    child,
+    parent,
+    therapist,
     plan,
-    sessionsAsc,
-    analytics,
+    sessions,
+    assignments,
+    engine,
+    screenings: screeningsByChild.get(String(caseDoc.childId)) || null,
     evaluation,
-  } = ctx;
-  const scores = sessionScores(sessionsAsc);
-  const avgChildResponse = scores.length ? Number(mean(scores).toFixed(2)) : null;
-  const notes = sessionsAsc
-    .map((s) => String(s.notes || '').trim())
-    .filter(Boolean)
-    .slice(-12);
-
-  return {
-    childInfo,
-    therapyDomains: Array.isArray(plan?.domains) ? plan.domains : [],
-    goalsProgress: {
-      overallProgressPercent: analytics.overallProgress,
-      goals: analytics.goalProgress,
-    },
-    sessionsSummary: {
-      totalSessions: sessionsAsc.length,
-      avgChildResponse,
-      skipped: sessionsAsc.length === 0,
-    },
-    activitiesUsed: (analytics.activityEffectiveness || []).slice(0, 15),
-    therapistNotes: notes.length ? notes : undefined,
-    therapistNotesSkipped: notes.length === 0,
-    assignmentCompliance: analytics.assignmentStats,
-    clinicalContext: evaluation
-      ? {
-          diagnosisSummary: String(evaluation.diagnosis || '').trim() || undefined,
-          recommendations: String(evaluation.recommendations || '').trim() || undefined,
-        }
-      : undefined,
-  };
-}
-
-function buildIepPayload(ctx) {
-  const { plan, analytics } = ctx;
-  const short = Array.isArray(plan?.shortTermGoals) ? plan.shortTermGoals : [];
-  const legacy = Array.isArray(plan?.goals) ? plan.goals : [];
-  const longTermLegacy = legacy.filter((g) => g && g.type === 'long-term');
-  const lt = plan?.longTermGoal;
-  const longTermGoals = [];
-  if (lt && (lt.title || lt.description)) {
-    longTermGoals.push({
-      title: lt.title || '',
-      description: lt.description || '',
-      timeline: lt.timeline || '',
-    });
-  }
-  for (const g of longTermLegacy) {
-    longTermGoals.push({
-      title: g.title || '',
-      description: g.description || '',
-      timeline: '',
-    });
-  }
-
-  const shortTermGoals = short.map((g) => ({
-    title: g.title,
-    domain: g.domain,
-    status: g.status,
-    measurableCriteria: g.measurableCriteria || '',
-    reviewDate: g.reviewDate || null,
-  }));
-
-  const strategies = [];
-  const acts = Array.isArray(plan?.activities) ? plan.activities : [];
-  for (const a of acts) {
-    if (a?.title) strategies.push({ title: a.title, description: a.description || '' });
-  }
-
-  let nextReview = null;
-  for (const g of short) {
-    if (g.reviewDate) {
-      const d = new Date(g.reviewDate);
-      if (!nextReview || d < nextReview) nextReview = d;
-    }
-  }
-  const reviewTimelineWeeks = { min: 4, max: 6 };
-  const suggestedReviewBy = nextReview
-    ? nextReview.toISOString()
-    : new Date(getCurrentTimeMs() + 28 * 24 * 60 * 60 * 1000).toISOString();
-
-  return {
-    longTermGoals,
-    shortTermGoals,
-    goalStatusSummary: analytics.goalProgress.map((g) => ({
-      goalName: g.goalName,
-      status: g.status || 'Active',
-      progressPercent: g.progressPercent,
-    })),
-    recommendedStrategies: strategies,
-    reviewTimeline: {
-      weeksRange: reviewTimelineWeeks,
-      suggestedReviewBy,
-    },
-  };
-}
-
-function buildClinicianPayload(ctx) {
-  const { childInfo, analytics, evaluation, sessionsAsc } = ctx;
-  const redFlags = [];
-  for (const d of analytics.domainProgress || []) {
-    if (d.progressPercent < 25 && d.trend !== 'improving') {
-      redFlags.push({
-        domain: d.domain,
-        reason: 'Low average goal-linked progress for this domain',
-        progressPercent: d.progressPercent,
-        trend: d.trend,
-      });
-    }
-    if (d.trend === 'declining') {
-      redFlags.push({
-        domain: d.domain,
-        reason: 'Session-linked response trend is declining',
-        progressPercent: d.progressPercent,
-        trend: d.trend,
-      });
-    }
-  }
-
-  const obs = sessionsAsc
-    .map((s) => String(s.notes || '').trim())
-    .filter(Boolean)
-    .slice(-8);
-
-  return {
-    childInfo,
-    diagnosis: evaluation
-      ? {
-          diagnosis: evaluation.diagnosis || '',
-          comorbidConditions: evaluation.comorbidConditions || [],
-          developmentalSummary: evaluation.developmentalSummary || '',
-          observations: evaluation.observations || '',
-        }
-      : { diagnosis: '', message: 'No finalized clinical evaluation on file for this case.' },
-    therapyProgressSummary: {
-      overallProgress: analytics.overallProgress,
-      goalProgress: analytics.goalProgress,
-    },
-    domainAnalysis: analytics.domainProgress,
-    redFlags,
-    therapistObservations: obs,
-  };
-}
-
-function buildParentPayload(ctx) {
-  const { childInfo, analytics, sessionsAsc, plan } = ctx;
-  const improvements = (analytics.domainProgress || [])
-    .filter((d) => d.trend === 'improving')
-    .map((d) => `${d.domain}: progress trending positively.`);
-  const attention = (analytics.domainProgress || [])
-    .filter((d) => d.trend === 'declining' || d.progressPercent < 30)
-    .map((d) => `${d.domain}: may need extra practice or support.`);
-
-  const tips = [];
-  const acts = Array.isArray(plan?.activities) ? plan.activities : [];
-  for (const a of acts.slice(0, 5)) {
-    if (a?.title) tips.push(`Try structured practice: ${a.title}${a.description ? ` — ${a.description}` : ''}`);
-  }
-  const instr = sessionsAsc
-    .map((s) => String(s.parentInstructions || '').trim())
-    .filter(Boolean)
-    .slice(-3);
-  for (const t of instr) tips.push(`From recent sessions: ${t}`);
-
-  return {
-    childInfo,
-    progressSummary: `Overall therapy progress is about ${analytics.overallProgress}% based on session responses linked to plan goals.`,
-    improvements: improvements.length ? improvements : ['Continue consistent home routines that match therapy targets.'],
-    areasNeedingAttention: attention.length ? attention : ['Keep communication open with your therapist about daily observations.'],
-    homeGuidanceTips: tips.length ? tips.slice(0, 8) : ['Follow therapist home assignments and celebrate small wins.'],
-  };
-}
-
-function buildProgressPayload(ctx) {
-  const { childInfo, analytics } = ctx;
-  return {
-    childInfo,
-    progressSummary: {
-      overallProgressPercent: analytics.overallProgress,
-      goalProgress: analytics.goalProgress,
-      domainProgress: analytics.domainProgress,
-      sessionTrend: analytics.sessionTrend,
-    },
-    redFlags: (analytics.domainProgress || []).filter(
-      (d) => d.trend === 'declining' || Number(d.progressPercent || 0) < 30
-    ),
-  };
-}
-
-function buildSessionPayload(ctx) {
-  const { childInfo, sessionsAsc } = ctx;
-  const scores = sessionScores(sessionsAsc);
-  const avgChildResponse = scores.length ? Number(mean(scores).toFixed(2)) : null;
-  const recentSessions = sessionsAsc.slice(-12).reverse().map((s) => ({
-    id: s._id,
-    sessionDate: s.sessionDate,
-    duration: s.duration || 0,
-    status: s.status || 'completed',
-    goalsTargeted: Array.isArray(s.goalsTargeted) ? s.goalsTargeted : [],
-    activitiesUsed: Array.isArray(s.activitiesUsed) ? s.activitiesUsed : [],
-    childResponse: s.childResponse || '',
-    notes: s.notes || '',
-  }));
-
-  return {
-    childInfo,
-    sessionSummary: {
-      totalSessions: sessionsAsc.length,
-      avgChildResponse,
-      recentSessions,
-      skipped: sessionsAsc.length === 0,
-    },
-  };
-}
-
-function buildTherapyPayload(ctx) {
-  const { childInfo, plan, analytics } = ctx;
-  const shortTermGoals = Array.isArray(plan?.shortTermGoals)
-    ? plan.shortTermGoals.map((g) => ({
-        title: g.title || '',
-        domain: g.domain || '',
-        status: g.status || 'Active',
-        measurableCriteria: g.measurableCriteria || '',
-        reviewDate: g.reviewDate || null,
-      }))
-    : [];
-  const activities = Array.isArray(plan?.activities)
-    ? plan.activities.map((a) => ({
-        title: a.title || '',
-        description: a.description || '',
-        linkedGoal: a.linkedGoal || '',
-      }))
-    : [];
-
-  return {
-    childInfo,
-    therapyPlanSummary: {
-      domains: Array.isArray(plan?.domains) ? plan.domains : [],
-      longTermGoal: plan?.longTermGoal || null,
-      shortTermGoals,
-      activities,
-    },
-    progress: {
-      overallProgressPercent: analytics.overallProgress,
-      goals: analytics.goalProgress,
-      domains: analytics.domainProgress,
-      assignmentCompliance: analytics.assignmentStats,
-    },
-  };
-}
-
-function assembleReportData(type, ctx) {
-  const generatedAt = getCurrentTime().toISOString();
-  const base = {
-    type,
-    generatedAt,
-    insufficientData: insufficientCore(ctx.plan, ctx.sessionsAsc, ctx.assignments),
-  };
-
-  switch (type) {
-    case 'monthly':
-      return { ...base, ...buildMonthlyPayload(ctx) };
-    case 'iep':
-      return { ...base, ...buildIepPayload(ctx) };
-    case 'clinician':
-      return { ...base, ...buildClinicianPayload(ctx) };
-    case 'parent':
-      return { ...base, ...buildParentPayload(ctx) };
-    case 'progress':
-      return { ...base, ...buildProgressPayload(ctx) };
-    case 'session':
-      return { ...base, ...buildSessionPayload(ctx) };
-    case 'therapy':
-      return { ...base, ...buildTherapyPayload(ctx) };
-    case 'integrated': {
-      const progressEngine = buildProgressEnginePayload({
-        caseId: String(ctx.caseDoc._id),
-        plan: ctx.plan,
-        sessions: ctx.sessionsAsc,
-        assignments: ctx.assignments,
-      });
-      return {
-        ...base,
-        ...buildIntegratedTherapyReport({
-          childInfo: ctx.childInfo,
-          caseDoc: ctx.caseDoc,
-          plan: ctx.plan,
-          sessionsAsc: ctx.sessionsAsc,
-          assignments: ctx.assignments,
-          progressEngine,
-          evaluation: ctx.evaluation,
-        }),
-      };
-    }
-    default:
-      return base;
-  }
+  });
+  return { data, sessionsCount: sessions.length };
 }
 
 /**
  * POST /api/reports/generate/:caseId
- * Progress-engine–aware integrated report (type: integrated).
+ * Integrated report (type: integrated) — requires at least one session log.
  */
 exports.generateReportByCaseId = async (req, res) => {
   try {
@@ -394,81 +120,26 @@ exports.generateReportByCaseId = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid caseId' });
     }
 
-    const therapistId = req.user._id;
-    const access = await assertTherapistCaseAccess(req, caseId, therapistId);
-    if (!access.ok) {
-      return res.status(access.status || 403).json({ success: false, message: access.message || 'Access denied' });
-    }
+    const gate = await assertReportGenerationAllowed(req, caseId);
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
 
-    // Strict workflow dependency: reports can only be generated for valid therapy states.
-    const therapyCase = await TherapyCase.findOne({
-      caseId,
-      therapistId,
-      status: { $in: [THERAPY_STATUS.ACTIVE, THERAPY_STATUS.COMPLETED] },
-    })
-      .select('_id status')
-      .lean();
-    if (!therapyCase) {
-      return res.status(400).json({
-        success: false,
-        message: 'Report generation not allowed: therapy must be ACTIVE or COMPLETED.',
-        errorCode: 'INVALID_THERAPY_STATE',
-      });
-    }
-
-    const caseDoc = await ChildCase.findById(caseId).lean();
-    if (!caseDoc) {
+    const built = await buildReportForCase(caseId, 'integrated');
+    if (!built) {
       return res.status(404).json({ success: false, message: 'Case not found' });
     }
-
-    const [plan, sessions, assignments, evaluation] = await Promise.all([
-      TherapyPlan.findOne({ caseId, therapistId }).lean(),
-      SessionLog.find({ caseId, therapistId }).sort({ sessionDate: 1 }).lean(),
-      HomeAssignment.find({ caseId, therapistId }).lean(),
-      ClinicalEvaluation.findOne({ caseId, status: 'FINALIZED' }).sort({ createdAt: -1 }).lean(),
-    ]);
-
-    const sessionsAsc = [...sessions];
-    if (sessionsAsc.length === 0) {
+    if (built.sessionsCount === 0) {
       return res.status(400).json({
         success: false,
         message: 'Report generation not allowed: at least one session log is required.',
         errorCode: 'NO_SESSIONS',
       });
     }
-    const progressEngine = buildProgressEnginePayload({
-      caseId: String(caseId),
-      plan,
-      sessions: sessionsAsc,
-      assignments,
-    });
-    const childInfo = await loadChildDisplay(caseDoc);
 
-    const data = buildIntegratedTherapyReport({
-      childInfo,
-      caseDoc,
-      plan: plan || {},
-      sessionsAsc,
-      assignments,
-      progressEngine,
-      evaluation,
-    });
-
-    const doc = await Report.create({
-      caseId,
-      therapistId,
-      type: 'integrated',
-      data,
-    });
+    const doc = await Report.create({ caseId, therapistId: req.user._id, type: 'integrated', data: built.data });
 
     return res.status(201).json({
       success: true,
-      data: {
-        reportId: doc._id,
-        type: 'integrated',
-        generatedAt: doc.data.generatedAt,
-        data: doc.data,
-      },
+      data: { reportId: doc._id, type: 'integrated', generatedAt: doc.data.generatedAt, data: doc.data },
     });
   } catch (error) {
     console.error('generateReportByCaseId:', error);
@@ -491,53 +162,10 @@ exports.generateReport = async (req, res) => {
     }
 
     const therapistId = req.user._id;
-    const access = await assertTherapistCaseAccess(req, caseId, therapistId);
-    if (!access.ok) {
-      return res.status(access.status || 403).json({ success: false, message: access.message || 'Access denied' });
-    }
+    const gate = await assertReportGenerationAllowed(req, caseId);
+    if (!gate.ok) return res.status(gate.status).json(gate.body);
 
-    const therapyCase = await TherapyCase.findOne({
-      caseId,
-      therapistId,
-      status: { $in: [THERAPY_STATUS.ACTIVE, THERAPY_STATUS.COMPLETED] },
-    })
-      .select('_id status')
-      .lean();
-    if (!therapyCase) {
-      return res.status(400).json({
-        success: false,
-        message: 'Report generation not allowed: therapy must be ACTIVE or COMPLETED.',
-        errorCode: 'INVALID_THERAPY_STATE',
-      });
-    }
-
-    const caseDoc = await ChildCase.findById(caseId).lean();
-    if (!caseDoc) {
-      return res.status(404).json({ success: false, message: 'Case not found' });
-    }
-
-    const [plan, sessions, assignments, evaluation] = await Promise.all([
-      TherapyPlan.findOne({ caseId, therapistId }).lean(),
-      SessionLog.find({ caseId, therapistId }).sort({ sessionDate: 1 }).lean(),
-      HomeAssignment.find({ caseId, therapistId }).lean(),
-      ClinicalEvaluation.findOne({ caseId, status: 'FINALIZED' }).sort({ createdAt: -1 }).lean(),
-    ]);
-
-    const sessionsAsc = [...sessions];
-    const analytics = buildUnifiedCaseAnalytics({ plan, sessions: sessionsAsc, assignments });
-    const childInfo = await loadChildDisplay(caseDoc);
-
-    const ctx = {
-      caseDoc,
-      plan: plan || {},
-      sessionsAsc,
-      assignments,
-      analytics,
-      evaluation,
-      childInfo,
-    };
-
-    const duplicateWindow = new Date(getCurrentTimeMs() - 45 * 1000);
+    const duplicateWindow = new Date(getCurrentTimeMs() - DUPLICATE_WINDOW_MS);
     const recent = await Report.findOne({
       caseId,
       therapistId,
@@ -560,13 +188,33 @@ exports.generateReport = async (req, res) => {
       });
     }
 
-    const data = assembleReportData(type, ctx);
-    const doc = await Report.create({
-      caseId,
-      therapistId,
-      type,
-      data,
-    });
+    const built = await buildReportForCase(caseId, type);
+    if (!built) {
+      return res.status(404).json({ success: false, message: 'Case not found' });
+    }
+
+    const dedupeKey = `${caseId}:${therapistId}:${type}:${Math.floor(getCurrentTimeMs() / DUPLICATE_WINDOW_MS)}`;
+    let doc;
+    try {
+      doc = await Report.create({ caseId, therapistId, type, data: built.data, dedupeKey });
+    } catch (err) {
+      if (err && err.code === 11000) {
+        const existing = await Report.findOne({ dedupeKey }).lean();
+        if (existing) {
+          return res.status(200).json({
+            success: true,
+            data: {
+              reportId: existing._id,
+              duplicate: true,
+              type: existing.data?.type || type,
+              generatedAt: existing.data?.generatedAt || existing.createdAt,
+              data: existing.data,
+            },
+          });
+        }
+      }
+      throw err;
+    }
 
     return res.status(201).json({
       success: true,
@@ -641,7 +289,7 @@ exports.listMyReports = async (req, res) => {
         therapistId: r.therapistId,
         generatedAt: r.data?.generatedAt || r.createdAt,
         insufficientData: Boolean(r.data?.insufficientData),
-        childName: r.data?.childInfo?.childName || 'Child',
+        childName: r.data?.child?.name || r.data?.childInfo?.childName || 'Child',
         createdAt: r.createdAt,
       })),
     });
@@ -740,6 +388,15 @@ exports.getReportById = async (req, res) => {
   }
 };
 
+function pdfFilename(report) {
+  const name =
+    String(report?.data?.child?.name || report?.data?.childInfo?.childName || 'child')
+      .replace(/[^A-Za-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'child';
+  const date = new Date(report?.data?.generatedAt || report?.createdAt || Date.now()).toISOString().slice(0, 10);
+  return `AutismCare_${report?.type || 'report'}_${name}_${date}.pdf`;
+}
+
 /**
  * GET /api/reports/:reportId/download
  * Generates PDF on first request, caches path on the report document.
@@ -782,6 +439,9 @@ exports.downloadReportPdf = async (req, res) => {
 
     let rel = report.pdfRelativePath && String(report.pdfRelativePath).trim();
     const ensurePdf = async () => {
+      if (report.data?.schema === STANDARD_REPORT_SCHEMA) {
+        return writeStandardReportPdf(report._id, report.data);
+      }
       if (report.type === 'integrated') {
         return writeIntegratedReportPdf(report._id, report.data || {});
       }
@@ -804,12 +464,12 @@ exports.downloadReportPdf = async (req, res) => {
         return res.status(500).json({ success: false, message: 'PDF file could not be created' });
       }
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="therapy-report-${reportId}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${pdfFilename(report)}"`);
       return res.sendFile(abs2);
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="therapy-report-${reportId}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${pdfFilename(report)}"`);
     return res.sendFile(absPath);
   } catch (error) {
     console.error('downloadReportPdf:', error);

@@ -12,7 +12,7 @@ const { sendEmail } = require("../services/emailService");
 const { appendScreeningReportBody } = require("../utils/screeningReportPdf");
 const { evaluateDecisionSupport } = require("../services/decisionEngine");
 const { createBulkNotifications, NOTIFICATION_TYPES } = require("../utils/notification");
-const { buildScreeningSummaryForChild } = require('../services/childCase.service');
+const { buildScreeningSummaryForChild, riskFromSummary } = require('../services/childCase.service');
 const { transitionCase, CASE_EVENTS } = require('../services/caseLifecycleService');
 const { getScreeningPlan } = require('../services/screeningOrchestrator');
 const { screeningResultTemplate } = require('../emailTemplates/screeningResultTemplate');
@@ -153,8 +153,6 @@ exports.calculateScreening = async (req, res) => {
       }
     }
 
-    console.log('calculateScreening called with:', { childId, questionnaireType, responses: responses.length, dob, weeksPreterm, intervalMonths });
-
     let scores = {};
     let result = "";
     let resultDescription = "";
@@ -162,12 +160,10 @@ exports.calculateScreening = async (req, res) => {
 
     if (questionnaireType === "MCHAT-R") {
       const questionnaire = await Questionnaire.findOne({ name: "MCHAT-R" });
-      console.log('Questionnaire found:', questionnaire ? 'Yes' : 'No');
       if (!questionnaire) {
         throw new Error('MCHAT-R questionnaire not found in database');
       }
       scores = scoreMCHATFromDB(questionnaire, responses);
-      console.log('Scores calculated:', scores);
       result = scores.result;
       resultDescription = scores.resultDescription;
       riskLevel = scores.result === "Pass" ? "low" : scores.result === "Monitor" ? "medium" : "high";
@@ -286,16 +282,21 @@ exports.calculateScreening = async (req, res) => {
         const resp = await sendEmail(emailOptions);
         if (!resp?.ok) throw new Error(resp?.error || 'Email send failed');
         reportEmailed = true;
-        console.log("[calculateScreening] Report sent by email to", parent.email);
       }
     } catch (err) {
       console.error("[calculateScreening] Failed to send report by email:", err.message);
       reportEmailError = err.message || "Email could not be sent.";
     }
 
-    // Lifecycle: SCREENING_SUBMITTED -> REVIEW (store risk + latest screening summary)
+    // Lifecycle: SCREENING_SUBMITTED -> REVIEW (store risk + latest screening summary).
+    // The case risk combines the latest M-CHAT-R and latest ASQ-3 (higher concern wins), so submitting one
+    // questionnaire never hides a concerning result from the other.
+    let screeningSummary = null;
+    let caseRiskLevel = riskLevel;
+    let screeningProgress = {};
     try {
-      const screeningSummary = await buildScreeningSummaryForChild(childId);
+      screeningSummary = await buildScreeningSummaryForChild(childId);
+      caseRiskLevel = riskFromSummary(screeningSummary);
       const skippedMchat = String(req.body?.skippedMchat || '').toLowerCase() === 'true';
       const orderFollowedRaw = req.body?.orderFollowed;
       const orderFollowed =
@@ -307,7 +308,7 @@ exports.calculateScreening = async (req, res) => {
               ? false
               : undefined;
 
-      const screeningProgress = {
+      screeningProgress = {
         ...(questionnaireType === 'MCHAT-R' ? { mchatCompleted: true } : {}),
         ...(questionnaireType === 'ASQ-3' ? { asqCompleted: true } : {}),
         ...(skippedMchat === true ? { skippedMchat: true } : {}),
@@ -318,7 +319,7 @@ exports.calculateScreening = async (req, res) => {
         childId,
         eventType: CASE_EVENTS.SCREENING_SUBMITTED,
         payload: {
-          riskLevel,
+          riskLevel: caseRiskLevel,
           screeningSummary,
           screeningProgress,
           screeningFlow: {
@@ -330,7 +331,23 @@ exports.calculateScreening = async (req, res) => {
         triggeredBy: req.user._id,
       });
     } catch (e) {
-      console.error('[calculateScreening] case lifecycle transition failed:', e?.message || e);
+      // A rescreen while the case is already in diagnosis/therapy is not a lifecycle step, but the case list
+      // must still show the newest results: refresh the stored summary + risk without changing status.
+      if (e?.code === 'INVALID_CASE_TRANSITION' && screeningSummary) {
+        try {
+          const progressSet = Object.fromEntries(
+            Object.entries(screeningProgress).map(([k, v]) => [`screeningProgress.${k}`, v])
+          );
+          await ChildCase.updateOne(
+            { parentId: req.user._id, childId },
+            { $set: { screeningSummary, riskLevel: caseRiskLevel, ...progressSet } }
+          );
+        } catch (refreshErr) {
+          console.error('[calculateScreening] case screening refresh failed:', refreshErr?.message || refreshErr);
+        }
+      } else {
+        console.error('[calculateScreening] case lifecycle transition failed:', e?.message || e);
+      }
     }
 
     try {
@@ -973,9 +990,6 @@ exports.getAvailableCliniciansAndTherapists = async (req, res) => {
       approvalStatus: 'active'
     }).select('firstName lastName specialization email phoneNumber');
 
-    console.log('Clinicians found:', clinicians.length);
-    console.log('Therapists found:', therapists.length);
-
     res.status(200).json({
       success: true,
       data: {
@@ -999,8 +1013,6 @@ exports.sendReportByEmail = async (req, res) => {
     const childName = (req.body && req.body.childName || "Child").trim();
     const screeningType = (req.body && req.body.screeningType) || "Screening";
     const pdfFile = req.file;
-
-    console.log("[sendReportByEmail] emailTo:", emailTo, "| hasFile:", !!pdfFile, "| bodyKeys:", req.body ? Object.keys(req.body) : "none");
 
     if (!emailTo || typeof emailTo !== "string") {
       return res.status(400).json({
@@ -1031,8 +1043,6 @@ exports.sendReportByEmail = async (req, res) => {
         content: Buffer.isBuffer(pdfFile.buffer) ? pdfFile.buffer : Buffer.from(pdfFile.buffer),
       },
     ];
-
-    console.log("[sendReportByEmail] Sending to", to, "attachment size:", pdfFile.buffer.length);
     const resp = await sendEmail({
       to,
       subject,
@@ -1040,8 +1050,6 @@ exports.sendReportByEmail = async (req, res) => {
       attachments,
     });
     if (!resp?.ok) throw new Error(resp?.error || 'Email send failed');
-
-    console.log("[sendReportByEmail] Sent successfully to", to);
     res.status(200).json({
       success: true,
       message: "Report sent successfully.",

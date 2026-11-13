@@ -4,6 +4,7 @@ import { DashboardLayout } from '../layout/DashboardLayout';
 import { DashboardHome } from './DashboardHome';
 import { PARENT_WELCOME_STORAGE_KEY, ParentWelcomeWizard } from './ParentWelcomeWizard';
 import { getParentNavigationItems } from './parentNavigation';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const ChildManagement = lazy(() => import('./ChildManagement').then((m) => ({ default: m.ChildManagement })));
 const ScreeningSection = lazy(() => import('./ScreeningSection').then((m) => ({ default: m.ScreeningSection })));
@@ -93,9 +94,8 @@ export function ParentDashboard({ user, onLogout }: ParentDashboardProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // TEMP DEBUG HELPERS: restore interactivity if something disabled it.
+  // Safety net: restore clicks if a dialog teardown left pointer-events disabled.
   useEffect(() => {
-    console.log('ParentDashboard mounted');
     if (typeof document !== 'undefined') {
       document.body.style.pointerEvents = 'auto';
     }
@@ -123,7 +123,8 @@ export function ParentDashboard({ user, onLogout }: ParentDashboardProps) {
     if (currentSection !== 'messages') setOpenConversationId(null);
   }, [currentSection]);
 
-  const navigation = getParentNavigationItems();
+  const { t } = useLanguage();
+  const navigation = getParentNavigationItems(t);
 
   const handleSectionChange = (section: string) => {
     setCurrentSection(section as Section);

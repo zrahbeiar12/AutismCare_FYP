@@ -1,0 +1,77 @@
+/*
+ * Standard report viewer (schema "standard-v1"). Self-contained styles: the Tailwind snapshot in index.css is
+ * frozen, so this view does not rely on which utility classes happen to exist. Light + dark via theme tokens.
+ */
+.rv { display: grid; gap: 1rem; color: var(--foreground); font-size: 0.875rem; }
+.rv-card { background: var(--card); border: 1px solid var(--border); border-radius: 0.875rem; padding: 1rem; min-width: 0; }
+.rv-head { background: var(--primary); color: #fff; border-radius: 0.875rem; padding: 1rem 1.125rem; border-bottom: 3px solid var(--accent); }
+.rv-head-brand { color: var(--accent); font-weight: 700; font-size: 0.75rem; letter-spacing: 0.04em; }
+.rv-head-title { font-size: 1.25rem; font-weight: 700; margin-top: 0.125rem; color: #fff; }
+.rv-head-meta { font-size: 0.75rem; opacity: 0.85; margin-top: 0.25rem; }
+
+.rv-kv { display: grid; grid-template-columns: 1fr; gap: 0.375rem 1.5rem; }
+@media (min-width: 640px) { .rv-kv { grid-template-columns: 1fr 1fr; } }
+.rv-kv-row { display: flex; gap: 0.75rem; min-width: 0; }
+.rv-kv-k { flex: 0 0 7.5rem; color: var(--muted-foreground); font-size: 0.75rem; padding-top: 0.0625rem; }
+.rv-kv-v { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+
+.rv-summary { border-left: 3px solid var(--primary); background: color-mix(in oklab, var(--primary) 7%, var(--card)); font-size: 0.9375rem; line-height: 1.5; }
+.dark .rv-summary { border-left-color: #60a5fa; background: color-mix(in oklab, #3b82f6 12%, var(--card)); }
+
+.rv-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+@media (min-width: 768px) { .rv-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rv-tile { padding: 0.875rem; }
+.rv-tile-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
+.rv-tile-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; margin-top: 0.125rem; }
+.dark .rv-tile-value { color: #60a5fa; }
+.rv-tile-sub { font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.375rem; }
+.rv-pos { color: #15803d; }
+.rv-neg { color: #b91c1c; }
+.dark .rv-pos { color: #86efac; }
+.dark .rv-neg { color: #fca5a5; }
+
+.rv-h { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem; }
+.rv-h-title { font-weight: 700; font-size: 0.9375rem; color: var(--foreground); padding-left: 0.5rem; border-left: 3px solid var(--accent); }
+.rv-h-hint { font-size: 0.75rem; color: var(--muted-foreground); }
+
+.rv-track { position: relative; height: 0.5rem; border-radius: 9999px; background: var(--muted); overflow: hidden; }
+.rv-fill { position: absolute; inset: 0 auto 0 0; border-radius: 9999px; background: var(--primary); }
+.dark .rv-fill { background: #60a5fa; }
+.rv-domain { display: grid; grid-template-columns: 10rem minmax(0, 1fr) 3rem 5.5rem; align-items: center; gap: 0.75rem; padding: 0.25rem 0; }
+.rv-num { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.rv-trend { font-size: 0.75rem; text-align: right; }
+.rv-trend-improving { color: #15803d; }
+.rv-trend-declining { color: #b91c1c; }
+.rv-trend-stable, .rv-trend- { color: var(--muted-foreground); }
+.dark .rv-trend-improving { color: #86efac; }
+.dark .rv-trend-declining { color: #fca5a5; }
+
+.rv-table-wrap { overflow-x: auto; margin: 0 -0.25rem; }
+.rv-table { width: 100%; border-collapse: collapse; min-width: 34rem; font-size: 0.8125rem; }
+.rv-table th { text-align: left; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); padding: 0.5rem; border-bottom: 1px solid var(--border); }
+.rv-table td { padding: 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.rv-table .rv-r { text-align: right; font-variant-numeric: tabular-nums; }
+
+.rv-chart { width: 100%; height: auto; display: block; }
+.rv-chart-grid { stroke: var(--border); stroke-width: 1; }
+.rv-chart-line { fill: none; stroke: var(--primary); stroke-width: 2.25; }
+.rv-chart-dot { fill: var(--primary); }
+.rv-chart-last { fill: var(--accent); }
+.rv-chart-text { fill: var(--muted-foreground); font-size: 11px; }
+.dark .rv-chart-line { stroke: #60a5fa; }
+.dark .rv-chart-dot { fill: #60a5fa; }
+
+.rv-two { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+@media (min-width: 640px) { .rv-two { grid-template-columns: 1fr 1fr; } }
+.rv-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.375rem; line-height: 1.45; }
+.rv-muted { color: var(--muted-foreground); }
+.rv-sub { font-weight: 600; margin: 0.75rem 0 0.375rem; }
+.rv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.rv-asq { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 3.5rem 4.75rem; align-items: center; gap: 0.75rem; padding: 0.2rem 0; }
+@media (max-width: 480px) {
+  .rv-domain { grid-template-columns: 8rem minmax(0, 1fr) 2.75rem; }
+  .rv-domain .rv-trend { display: none; }
+  .rv-asq { grid-template-columns: 7rem minmax(0, 1fr) 4.5rem; }
+  .rv-asq .rv-num { display: none; }
+}
+.rv-disclaimer { font-size: 0.75rem; color: var(--muted-foreground); line-height: 1.45; }

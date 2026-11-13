@@ -4,7 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
+import "./styles/tailwind-supplement.css";
 import "./styles/globals.css";
+import "./styles/theme-fixes.css";
 
 
 
@@ -22,40 +24,20 @@ if (!import.meta.env.DEV) {
 }
 
 import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
+import App from "./App";
 import { ThemeProvider } from "next-themes";
+import { LanguageProvider } from "./i18n/LanguageContext";
 const container = document.getElementById("root");
-
-// TEMP DEBUG HELPERS: detect what blocks clicks globally.
-if (typeof document !== "undefined") {
-  console.log("main.tsx mounted");
-  document.body.style.pointerEvents = "auto";
-
-  // Capture clicks before React, so we can see if an overlay is swallowing them.
-  document.addEventListener(
-    "pointerdown",
-    (e) => {
-      const { clientX: x, clientY: y } = e;
-      const top = document.elementFromPoint(x, y);
-      const bodyPE = window.getComputedStyle(document.body).pointerEvents;
-      const htmlPE = window.getComputedStyle(document.documentElement).pointerEvents;
-      const root = document.getElementById("root");
-      const rootPE = root ? window.getComputedStyle(root).pointerEvents : "n/a";
-      const overlays = document.querySelectorAll("[data-radix-dialog-overlay], [data-radix-popper-content-wrapper]");
-      // eslint-disable-next-line no-console
-      console.log("[debug:pointerdown]", { x, y, top, bodyPE, htmlPE, rootPE, overlays: overlays.length });
-    },
-    { capture: true },
-  );
-}
 
 if (container) {
   createRoot(container).render(
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

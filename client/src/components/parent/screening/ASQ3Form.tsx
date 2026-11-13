@@ -8,6 +8,8 @@ import { ProgressHeader } from "./guided/ProgressHeader";
 import { GuidanceCards } from "./guided/GuidanceCards";
 import { GuideToggle } from "./guided/GuideToggle";
 import { QuestionCard } from "./guided/QuestionCard";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import { useOfficialTranslation } from "../../../i18n/officialQuestionnaire";
 import { ReadMoreSection } from "./guided/ReadMoreSection";
 import { ResumeProgressDialog } from "./guided/ResumeProgressDialog";
 import { useScreeningProgress } from "./guided/useScreeningProgress";
@@ -76,6 +78,8 @@ export function ASQ3Form({ child, flowContext, onComplete }: ASQ3FormProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [questionnaire, setQuestionnaire] = useState<any>(null);
+  const { t, lang } = useLanguage();
+  const official = useOfficialTranslation(questionnaire?.intervalMonths ? `asq3-${questionnaire.intervalMonths}` : null, lang);
   const [loading, setLoading] = useState(true);
   const [guideMode, setGuideMode] = useState(true);
   const [activeLocalIndex, setActiveLocalIndex] = useState(0);
@@ -285,6 +289,11 @@ export function ASQ3Form({ child, flowContext, onComplete }: ASQ3FormProps) {
 
         <GuideToggle enabled={guideMode} onChange={setGuideMode} />
 
+        {official.missing ? (
+          <p dir="auto" className="ur-text rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {t("screening.noOfficialTranslation")}
+          </p>
+        ) : null}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentDomainIndex}
@@ -335,16 +344,16 @@ export function ASQ3Form({ child, flowContext, onComplete }: ASQ3FormProps) {
                 <QuestionCard
                   key={question.questionId}
                   indexLabel={String(localIndex + 1)}
-                  text={question.text}
+                  text={official.item(question.questionId, question.text)}
                   value={value}
                   answered={answered}
                   active={active}
                   hint={domainMeta[currentDomain]?.hint ?? "Answer based on typical behavior lately."}
                   showHint={guideMode && active}
                   options={[
-                    { value: "yes", label: "Yes" },
-                    { value: "sometimes", label: "Sometimes" },
-                    { value: "not-yet", label: "Not Yet" },
+                    { value: "yes", label: official.option("yes", t("answer.yes")) },
+                    { value: "sometimes", label: official.option("sometimes", t("answer.sometimes")) },
+                    { value: "not-yet", label: official.option("not-yet", t("answer.notYet")) },
                   ]}
                   onSelect={(v) => handleAnswer(question.questionId, v, localIndex)}
                   containerRef={(el) => {

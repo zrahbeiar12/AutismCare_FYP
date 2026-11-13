@@ -12,7 +12,9 @@ import {
 } from '../ui/select';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, FileDown } from 'lucide-react';
+import { toast } from 'sonner';
+import { savePdfResponse } from '../reports/downloadReportPdf';
 
 interface ReferralTabProps {
   caseId: string;
@@ -224,6 +226,22 @@ export function ReferralTab({ caseId }: ReferralTabProps) {
                     <Badge variant="outline" className={statusBadgeClass[item.status] || ''}>
                       {item.status}
                     </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const res = await referralAPI.letterPdf(item._id);
+                          savePdfResponse(res, `Referral_${item._id}.pdf`);
+                        } catch {
+                          toast.error('Could not create the referral letter');
+                        }
+                      }}
+                    >
+                      <FileDown className="mr-1.5 h-4 w-4" />
+                      Referral letter
+                    </Button>
                   </div>
                 </div>
               ))}

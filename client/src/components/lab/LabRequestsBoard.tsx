@@ -1,4 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import { labRequestsAPI } from '../../api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -99,14 +100,14 @@ function Section({
             ) : null}
 
             {row.status === 'completed' && row.report_url ? (
-              <a
+              <ProtectedLink
                 href={resolveUploadUrl(row.report_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline mt-3 inline-block"
               >
                 Open uploaded report
-              </a>
+              </ProtectedLink>
             ) : null}
           </div>
         ))}

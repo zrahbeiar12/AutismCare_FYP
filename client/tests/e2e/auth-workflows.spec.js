@@ -34,6 +34,18 @@ test.describe.serial('Browser authentication workflows', () => {
   let clinicianToken;
   let caseId;
 
+  // The first-login welcome tour opens a moment after the dashboard loads and covers it; these tests are about
+  // other flows, so mark it as already seen (same flag the app stores when a parent finishes or skips it).
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.setItem('asd_parent_welcome_wizard_v1', '1');
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
   test.beforeAll(async () => {
     await mongoose.connect(process.env.MONGO_URI);
 

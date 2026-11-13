@@ -2,7 +2,7 @@ import { createContext, useState, useEffect } from 'react';
 import API from '../api';
 import { useNavigate } from 'react-router-dom';
 
-const noopAsync = async () => {};
+const noopAsync = async (..._args) => {};
 const noop = () => {};
 
 // Safe default prevents runtime crashes if a component renders

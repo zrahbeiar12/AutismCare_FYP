@@ -1,3 +1,4 @@
+import { openProtectedFile } from '../../utils/protectedFile';
 import { useState, useEffect } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -175,7 +176,7 @@ export default function ApprovalRequests() {
                                 </p>
                               </div>
                               <Button
-                                onClick={() => window.open(resolveUploadsHref(doc.url), '_blank', 'noopener,noreferrer')}
+                                onClick={() => openProtectedFile(doc.url).catch(() => toast.error('Could not open this document'))}
                                 variant="outline"
                                 size="sm"
                                 className="text-xs"

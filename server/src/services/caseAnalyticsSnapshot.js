@@ -210,7 +210,7 @@ function buildCaseAnalyticsSnapshot({ plan, sessions, assignments }, progressEng
     goalProgress = buildGoalProgressFromEngine(progressEngine, planSafe);
     overallProgress =
       progressEngine.overallScore != null
-        ? Number(((Number(progressEngine.overallScore) / 5) * 100).toFixed(2))
+        ? fiveToPct(progressEngine.overallScore)
         : 0;
     domainProgress = buildDomainProgressFromEngineGoals(goalProgress);
     sessionTrend = sessionTrendFromEngineWeekly(progressEngine.weeklyTrend);
@@ -341,7 +341,7 @@ function buildCaseAnalyticsSnapshot({ plan, sessions, assignments }, progressEng
 }
 
 const { buildStakeholderAnalyticsBlock } = require('./caseAnalyticsV2');
-const { buildProgressEnginePayload } = require('./progressEngine');
+const { buildProgressEnginePayload, fiveToPct } = require('./progressEngine');
 
 /**
  * Legacy chart fields + stakeholder KPI block + unified progress engine payload.

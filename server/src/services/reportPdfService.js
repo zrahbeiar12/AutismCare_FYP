@@ -7,6 +7,7 @@ const REPORTS_DIR = path.join(process.cwd(), 'uploads', 'reports');
 
 const { PdfLayout, safeText } = require('./pdf/pdfLayout.js');
 const { renderTrendChartPng } = require('./pdf/chartRenderer.js');
+const { renderStandardReportPdf } = require('./pdf/standardReportPdf.js');
 
 function ensureDir() {
   if (!fs.existsSync(REPORTS_DIR)) {
@@ -381,7 +382,25 @@ async function writeGenericReportPdf(reportId, type, data) {
   return `/uploads/reports/${filename}`;
 }
 
+/**
+ * Standard (schema "standard-v1") reports: one template for every type and audience.
+ * @returns {Promise<string>} relative URL path e.g. /uploads/reports/xxx.pdf
+ */
+async function writeStandardReportPdf(reportId, data) {
+  ensureDir();
+  const filename = `${String(reportId)}.pdf`;
+  const stream = fs.createWriteStream(path.join(REPORTS_DIR, filename));
+  const done = new Promise((resolve, reject) => {
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+  renderStandardReportPdf(data || {}, stream);
+  await done;
+  return `/uploads/reports/${filename}`;
+}
+
 module.exports = {
+  writeStandardReportPdf,
   writeIntegratedReportPdf,
   writeGenericReportPdf,
   REPORTS_DIR,

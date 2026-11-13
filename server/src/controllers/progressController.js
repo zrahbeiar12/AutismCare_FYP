@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { ChildCase } = require('../models/ChildCase');
-const { computeProgressEngineForCase } = require('../services/progressEngine');
+const { computeProgressEngineForCase, fiveToPct } = require('../services/progressEngine');
 const SessionLog = require('../models/SessionLog');
 const TherapyPlan = require('../models/TherapyPlan');
 const { parseResponseScore, parseScale1to5 } = require('../utils/sessionResponseScore');
@@ -151,7 +151,7 @@ exports.computeCaseProgressOverview = async function computeCaseProgressOverview
   const achievedGoals = goals.filter((g) => g && (g.mastery === true || String(g.masteryStatus || '') === 'mastered')).length;
   const overallProgressPercent =
     engine.overallScore != null
-      ? Number(((Number(engine.overallScore) / 5) * 100).toFixed(2))
+      ? fiveToPct(engine.overallScore)
       : totalGoals
         ? Number(((achievedGoals / totalGoals) * 100).toFixed(2))
         : 0;
@@ -177,7 +177,7 @@ exports.computeCaseProgressOverview = async function computeCaseProgressOverview
     ...d,
     progressPercent:
       d.scoreN > 0
-        ? Number((((d.scoreSum / d.scoreN) / 5) * 100).toFixed(2))
+        ? fiveToPct(d.scoreSum / d.scoreN)
         : d.totalGoals
           ? Number(((d.achievedGoals / d.totalGoals) * 100).toFixed(2))
           : 0,
