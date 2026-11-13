@@ -16,6 +16,8 @@ jobs:
     env:
       MONGO_URI: mongodb://127.0.0.1:27017/asd_ci_test
       JWT_SECRET: ci-jwt-secret-change-in-production
+      # Test-only value; jwt.sign() rejects an undefined expiresIn (server/.env is not in the repo).
+      JWT_EXPIRES_IN: 1h
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +66,10 @@ jobs:
     env:
       MONGO_URI: mongodb://127.0.0.1:27017/asd_e2e_ci
       JWT_SECRET: ci-jwt-secret-change-in-production
+      # Test-only value; jwt.sign() rejects an undefined expiresIn (server/.env is not in the repo).
+      JWT_EXPIRES_IN: 1h
+      # Playwright's webServer waits on :4000 (client/playwright.config.cjs); the server defaults to 8080.
+      PORT: "4000"
       NODE_ENV: test
       CI: "true"
       E2E_API_BASE_URL: http://127.0.0.1:4000
