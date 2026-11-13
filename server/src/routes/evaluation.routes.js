@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const {
   createEvaluation,
@@ -33,6 +34,10 @@ router.patch(
   // Resolve caseId from evaluation id, then validate case state
   async (req, res, next) => {
     try {
+      // Malformed ids would make findById throw a CastError (500); reject them as the controller does.
+      if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) {
+        return res.status(400).json({ success: false, message: 'Invalid evaluation id' });
+      }
       const ev = await ClinicalEvaluation.findById(req.params.id).select('caseId').lean();
       req.body = req.body || {};
       if (ev?.caseId) req.body.caseId = String(ev.caseId);

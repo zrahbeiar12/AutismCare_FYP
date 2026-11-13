@@ -93,6 +93,7 @@ describe('Clinical Evaluation Advanced Integration', () => {
       childId,
       parentId: parentDoc._id,
       clinicianId: new mongoose.Types.ObjectId(clinicianA._id),
+      status: 'REVIEW',
     });
     caseId = String(createdCase._id);
   });
@@ -184,6 +185,7 @@ describe('Clinical Evaluation Advanced Integration', () => {
       .send({
         recommendations: 'Unauthorized update attempt',
         status: 'final',
+        finalDisposition: 'MONITORING',
       });
     expect(patchByOtherClinicianRes.statusCode).toBe(403);
 
@@ -193,6 +195,7 @@ describe('Clinical Evaluation Advanced Integration', () => {
       .send({
         diagnosis: 'ASD traits under observation',
         status: 'final',
+        finalDisposition: 'MONITORING',
       });
     expect(validPatchRes.statusCode).toBe(201);
     expect(validPatchRes.body.data.status).toBe('final');
