@@ -2,7 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { parentAPI, reportAPI } from '../../api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { Loader2, RefreshCw, FileText } from 'lucide-react';
+import { Loader2, RefreshCw, FileText, Download } from 'lucide-react';
+import { toast } from 'sonner';
+import { downloadReportPdf } from './downloadReportPdf';
+import { messageFromAxiosBlobError } from '../../utils/blobApiError';
 import { ReportDocumentView } from './ReportDocumentView';
 import {
   Select,
@@ -26,6 +29,20 @@ export function ParentTherapyReports() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ type: string; data: Record<string, unknown> } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const downloadPdf = async () => {
+    if (!selectedId) return;
+    setDownloadingPdf(true);
+    try {
+      await downloadReportPdf(selectedId);
+      toast.success('PDF downloaded');
+    } catch (e: unknown) {
+      toast.error(await messageFromAxiosBlobError(e));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +155,10 @@ export function ParentTherapyReports() {
             <Button type="button" variant="ghost" size="sm" onClick={() => void loadList()} disabled={loadingList || !caseId}>
               <RefreshCw className={cn('mr-2 h-4 w-4', loadingList && 'animate-spin')} />
               Refresh list
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => void downloadPdf()} disabled={!selectedId || downloadingPdf}>
+              {downloadingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Download PDF
             </Button>
           </div>
 

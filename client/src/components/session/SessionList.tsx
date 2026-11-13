@@ -21,6 +21,7 @@ export type SessionRow = {
   status?: string;
   noteState?: string;
   parentInstructions?: string;
+  notes?: string;
 };
 
 const STATUS_CLASS: Record<string, string> = {

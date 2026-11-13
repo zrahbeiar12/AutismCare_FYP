@@ -57,7 +57,7 @@ exports.getParentCases = async (req, res) => {
     }
 
     const cases = await ChildCase.find({ parentId })
-      .select('_id childId status riskLevel screeningProgress createdAt')
+      .select('_id childId status riskLevel screeningProgress createdAt fileNumber')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -73,6 +73,7 @@ exports.getParentCases = async (req, res) => {
         riskLevel: c.riskLevel,
         screeningProgress: c.screeningProgress || { mchatCompleted: false, asqCompleted: false, skippedMchat: false },
         childName: `${firstName} ${lastName}`.trim() || 'Child',
+        fileNumber: c.fileNumber || null,
       };
     });
 
@@ -87,6 +88,17 @@ exports.getParentCases = async (req, res) => {
  * GET /api/parent/case/:caseId/sessions
  * Parent-facing session summaries + therapist parentInstructions.
  */
+/** Plain summary of structured goal scores for sessions logged without a free-text response. */
+function goalRatingSummary(goalData) {
+  const rows = Array.isArray(goalData) ? goalData : [];
+  const vals = rows
+    .map((r) => (r && r.rating != null ? Number(r.rating) : r && r.score != null ? Number(r.score) : null))
+    .filter((v) => v != null && Number.isFinite(v));
+  if (!vals.length) return '';
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  return `Goal ratings average ${avg.toFixed(1)} / 5 (${vals.length} goal${vals.length === 1 ? '' : 's'})`;
+}
+
 exports.getParentCaseSessions = async (req, res) => {
   try {
     const parentId = req.user._id;
@@ -103,14 +115,14 @@ exports.getParentCaseSessions = async (req, res) => {
 
     const sessions = await SessionLog.find({ caseId })
       .sort({ sessionDate: -1 })
-      .select('_id sessionDate duration childResponse parentInstructions status')
+      .select('_id sessionDate duration childResponse parentInstructions status goalData')
       .lean();
 
     const data = sessions.map((s) => ({
       _id: s._id,
       date: s.sessionDate,
       duration: s.duration ?? 0,
-      childResponse: s.childResponse || '',
+      childResponse: s.childResponse || goalRatingSummary(s.goalData),
       parentInstructions: s.parentInstructions != null ? String(s.parentInstructions) : '',
       status: s.status,
     }));

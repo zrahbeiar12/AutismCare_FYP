@@ -8,6 +8,8 @@ import { ProgressHeader } from "./guided/ProgressHeader";
 import { GuidanceCards } from "./guided/GuidanceCards";
 import { GuideToggle } from "./guided/GuideToggle";
 import { QuestionCard } from "./guided/QuestionCard";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import { useOfficialTranslation } from "../../../i18n/officialQuestionnaire";
 import { ResumeProgressDialog } from "./guided/ResumeProgressDialog";
 import { useScreeningProgress } from "./guided/useScreeningProgress";
 
@@ -30,6 +32,8 @@ export function MCHATForm({ child, flowContext, onComplete }: MCHATFormProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [questionnaire, setQuestionnaire] = useState<any>(null);
+  const { t, lang } = useLanguage();
+  const official = useOfficialTranslation("mchat", lang);
   const [loading, setLoading] = useState(true);
   const [guideMode, setGuideMode] = useState(true);
   const [activeLocalIndex, setActiveLocalIndex] = useState(0);
@@ -239,6 +243,11 @@ export function MCHATForm({ child, flowContext, onComplete }: MCHATFormProps) {
           </span>
         </div>
 
+        {official.missing ? (
+          <p dir="auto" className="ur-text rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {t("screening.noOfficialTranslation")}
+          </p>
+        ) : null}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentPageIndex}
@@ -257,15 +266,15 @@ export function MCHATForm({ child, flowContext, onComplete }: MCHATFormProps) {
                 <QuestionCard
                   key={question.questionId}
                   indexLabel={String(globalNumber)}
-                  text={question.text}
+                  text={official.item(question.questionId, question.text)}
                   value={value}
                   answered={answered}
                   active={active}
                   hint={mchatHint(globalNumber)}
                   showHint={guideMode && active}
                   options={[
-                    { value: "yes", label: "Yes" },
-                    { value: "no", label: "No" },
+                    { value: "yes", label: official.option("yes", t("answer.yes")) },
+                    { value: "no", label: official.option("no", t("answer.no")) },
                   ]}
                   onSelect={(v) => handleAnswer(question.questionId, v, localIndex)}
                   containerRef={(el) => {

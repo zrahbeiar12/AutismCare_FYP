@@ -44,6 +44,7 @@ exports.listTemplates = async (req, res) => {
       instructions: row.instructions,
       notes: row.notes,
       parentInvolvement: row.parentInvolvement,
+      createdBy: row.createdBy || null,
       isPlatformTemplate: row.createdBy == null,
     }));
     return res.status(200).json({

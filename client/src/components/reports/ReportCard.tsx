@@ -1,14 +1,11 @@
-import React from 'react';
-import { MoreHorizontal, Eye, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Eye, Download, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
 import { cn } from '../ui/utils';
+import { downloadReportPdf } from './downloadReportPdf';
+import { messageFromAxiosBlobError } from '../../utils/blobApiError';
 import type { ReportListRow } from './reportLabels';
 import { reportCardSummary, reportTypeLabel } from './reportLabels';
 
@@ -28,6 +25,18 @@ export function ReportCard({
   className?: string;
 }) {
   const summary = reportCardSummary(row);
+  const [downloading, setDownloading] = useState(false);
+  const download = async () => {
+    setDownloading(true);
+    try {
+      await downloadReportPdf(String(row.id));
+      toast.success('PDF downloaded');
+    } catch (e: unknown) {
+      toast.error(await messageFromAxiosBlobError(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
   const dateStr = row.generatedAt ? new Date(row.generatedAt).toLocaleString() : '—';
 
   return (
@@ -76,25 +85,13 @@ export function ReportCard({
             type="button"
             size="sm"
             variant="outline"
-            className="border text-muted-foreground"
-            disabled
-            title="Download coming soon"
+            className="border"
+            disabled={downloading}
+            onClick={() => void download()}
           >
-            <Download className="mr-1.5 h-4 w-4" />
-            Download
+            {downloading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
+            Download PDF
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground">
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">More</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={onView}>Open in viewer</DropdownMenuItem>
-              <DropdownMenuItem disabled>Share (soon)</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
     </article>

@@ -16,6 +16,7 @@ import {
 import { cn } from '../ui/utils';
 import { messageFromAxiosBlobError } from '../../utils/blobApiError';
 import { toast } from 'sonner';
+import { downloadReportPdf } from './downloadReportPdf';
 
 type ReportRow = { id: string; type: string; generatedAt: string; insufficientData?: boolean };
 
@@ -93,14 +94,7 @@ export function ClinicianCaseReports({ caseId }: { caseId: string }) {
     setDownloadingPdf(true);
     setError(null);
     try {
-      const res = await reportAPI.downloadPdf(selectedId);
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `case-report-${selectedId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadReportPdf(selectedId);
       toast.success('PDF downloaded');
     } catch (e: unknown) {
       const msg = await messageFromAxiosBlobError(e);

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { assertUserCaseAccess } = require('../utils/caseAccess');
-const { computeProgressEngineForCase } = require('../services/progressEngine');
+const { computeProgressEngineForCase, fiveToPct } = require('../services/progressEngine');
 const { getLabContextForCase, buildCrossDomainInsights } = require('../services/clinicalCorrelationService');
 
 function parentSummary(full) {
@@ -14,7 +14,7 @@ function parentSummary(full) {
   }
   const confOverall = Number(full.confidence?.overall ?? 0);
   const limited = confOverall > 0 && confOverall < 0.4;
-  const pct = full.overallScore != null ? Math.round((full.overallScore / 5) * 100) : null;
+  const pct = fiveToPct(full.overallScore);
 
   let trendLabel = 'steady';
   const ot = String(full.overallTrend || '').toLowerCase();

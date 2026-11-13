@@ -8,6 +8,8 @@ import { AuthContext } from '../../context/AuthContext';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { cn } from '../ui/utils';
 import { MainLayout } from './MainLayout';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 
 interface NavigationChild {
   id: string;
@@ -69,10 +71,10 @@ export function DashboardLayout({
   const auth = useContext(AuthContext);
   const user = auth?.user ?? null;
   const location = useLocation();
+  const { t } = useLanguage();
 
-  // TEMP DEBUG HELPERS: if a stale overlay ever disables clicks, recover immediately.
+  // Safety net: if a closed dialog ever leaves pointer-events disabled on <body>, restore clicks.
   useEffect(() => {
-    console.log('DashboardLayout mounted');
     if (typeof document !== 'undefined') {
       document.body.style.pointerEvents = 'auto';
     }
@@ -180,6 +182,33 @@ export function DashboardLayout({
           </button>
         );
       })}
+      {/* Settings + Logout live in the desktop sidebar footer; phones only see this menu, so repeat them here. */}
+      <div className="mt-2 space-y-1 border-t border-slate-200 pt-2">
+        {onOpenSettings ? (
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onOpenSettings();
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-slate-700 transition-colors hover:bg-slate-100"
+          >
+            <Settings className="h-5 w-5 text-slate-500" />
+            <span className="font-medium">{t('shell.settings')}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            onLogout?.();
+          }}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-amber-700 transition-colors hover:bg-amber-50"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="font-medium">{t('shell.logout')}</span>
+        </button>
+      </div>
     </nav>
   );
 
@@ -268,7 +297,7 @@ export function DashboardLayout({
         {onOpenSettings ? (
           <Button variant="outline" className="w-full justify-start bg-white" onClick={onOpenSettings}>
             <Settings className="mr-2 h-4 w-4" />
-            Settings
+            {t('shell.settings')}
           </Button>
         ) : null}
         <Button
@@ -277,7 +306,7 @@ export function DashboardLayout({
           onClick={onLogout || (() => {})}
         >
           <LogOut className="mr-2 h-4 w-4" />
-          Logout
+          {t('shell.logout')}
         </Button>
       </div>
     </div>
@@ -297,6 +326,7 @@ export function DashboardLayout({
               variant={variant === 'clinical' ? 'clinical' : 'default'}
             />
           )}
+          <LanguageSwitcher />
           <ThemeToggleButton variant={variant === 'clinical' ? 'minimal' : 'default'} />
           <div className="hidden h-8 w-px bg-slate-200 sm:block" aria-hidden />
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -305,7 +335,7 @@ export function DashboardLayout({
               <AvatarFallback className="bg-blue-100 font-semibold text-blue-700">{initials}</AvatarFallback>
             </Avatar>
             <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-xs font-medium uppercase tracking-wide text-slate-500">Welcome back</p>
+              <p className="truncate text-xs font-medium uppercase tracking-wide text-slate-500">{t('shell.welcomeBack')}</p>
               <p className="truncate text-sm font-semibold text-slate-800">
                 {user?.firstName} {user?.lastName}
               </p>

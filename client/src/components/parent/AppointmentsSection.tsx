@@ -537,8 +537,8 @@ export function AppointmentsSection({ initialShowBooking = false, formOnly = fal
   const getProfName = (prof: Appointment['professional']) =>
     prof.labName || `Dr. ${prof.firstName} ${prof.lastName}`;
 
-  const upcomingStatuses = [APPOINTMENT_STATUS.PENDING, APPOINTMENT_STATUS.APPROVED];
-  const pastStatuses = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.REJECTED, APPOINTMENT_STATUS.CANCELLED];
+  const upcomingStatuses: string[] = [APPOINTMENT_STATUS.PENDING, APPOINTMENT_STATUS.APPROVED];
+  const pastStatuses: string[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.REJECTED, APPOINTMENT_STATUS.CANCELLED];
 
   const upcoming = appointments.filter(a => upcomingStatuses.includes(normalizeAppointmentStatus(a.status)));
   const past = appointments.filter(a => pastStatuses.includes(normalizeAppointmentStatus(a.status)));

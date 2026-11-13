@@ -793,7 +793,10 @@ function buildProgressEnginePayload(input) {
     confidenceOverall = 0.55;
   }
 
-  const finalScore = Number((rawBlendScore * confidenceOverall).toFixed(2));
+  // Headline score = the child's performance level (0–5). Data confidence is reported separately (`confidence`)
+  // rather than multiplied in: a confident-looking low score for a child performing well misled every audience.
+  const finalScore = Number(rawBlendScore.toFixed(2));
+  const confidenceAdjustedScore = Number((rawBlendScore * confidenceOverall).toFixed(2));
   const confidence = {
     overall: confidenceOverall,
     label: confidenceLabel(confidenceOverall),
@@ -1010,6 +1013,7 @@ function buildProgressEnginePayload(input) {
     caseId: String(caseId),
     engineVersion: 3,
     overallScore: finalScore,
+    confidenceAdjustedScore,
     rawBlendScore: Number(rawBlendScore.toFixed(3)),
     confidence,
     overallTrend,
@@ -1213,6 +1217,34 @@ function buildSessionInsights(sessionsAsc, goalDefs) {
 }
 
 /**
+ * Canonical inputs for a case's progress, shared by every role (parent, clinician, therapist) and by reports.
+ * Uses the primary therapy plan and ONLY that plan's therapist's sessions + home assignments, so the case-wide
+ * figures are identical to what the primary therapist sees in their own (therapist-scoped) views.
+ * Sessions of every status are passed: the engine scores completed/signed ones and uses the rest for attendance.
+ * @returns {Promise<{ plan: object|null, therapistId: string|null, sessions: object[], assignments: object[] }>}
+ */
+async function loadCaseProgressInputs(caseId) {
+  if (!mongoose.Types.ObjectId.isValid(caseId)) return { plan: null, therapistId: null, sessions: [], assignments: [] };
+  const oid = new mongoose.Types.ObjectId(String(caseId));
+  const plan = await resolvePrimaryTherapyPlanForCase(caseId);
+  const ownerRaw = plan?.therapistId?._id || plan?.therapistId || null;
+  const owner = ownerRaw && mongoose.Types.ObjectId.isValid(String(ownerRaw)) ? new mongoose.Types.ObjectId(String(ownerRaw)) : null;
+  const scope = owner ? { caseId: oid, therapistId: owner } : { caseId: oid };
+  const [sessions, assignments] = await Promise.all([
+    SessionLog.find(scope).sort({ sessionDate: 1 }).lean(),
+    HomeAssignment.find(scope).lean(),
+  ]);
+  return { plan, therapistId: owner ? String(owner) : null, sessions, assignments };
+}
+
+/** 0–5 engine score → whole-number percent. The one conversion every screen and report uses. */
+function fiveToPct(v) {
+  const n = Number(v);
+  if (v == null || !Number.isFinite(n)) return null;
+  return Math.round(Math.min(5, Math.max(0, n)) / 5 * 100);
+}
+
+/**
  * Load data and compute engine (async). Uses optional therapist filter.
  */
 async function computeProgressEngineForCase(caseId, options = {}) {
@@ -1239,11 +1271,7 @@ async function computeProgressEngineForCase(caseId, options = {}) {
       HomeAssignment.find({ caseId: oid, therapistId: tid }).lean(),
     ]);
   } else {
-    plan = await resolvePrimaryTherapyPlanForCase(caseId);
-    [sessions, assigns] = await Promise.all([
-      SessionLog.find({ caseId: oid }).lean(),
-      HomeAssignment.find({ caseId: oid }).lean(),
-    ]);
+    ({ plan, sessions, assignments: assigns } = await loadCaseProgressInputs(caseId));
   }
 
   const data = buildProgressEnginePayload({
@@ -1261,6 +1289,8 @@ module.exports = {
   mapPlanDomainToClinical,
   mapPlanDomainToLegacyBucket,
   resolvePrimaryTherapyPlanForCase,
+  loadCaseProgressInputs,
+  fiveToPct,
   buildProgressEnginePayload,
   computeProgressEngineForCase,
   collectPlanGoalDefs,

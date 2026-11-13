@@ -1,4 +1,5 @@
 import { Badge } from '../ui/badge';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { FlaskConical, Download } from 'lucide-react';
 
@@ -144,7 +145,7 @@ export function CaseLabRequestsPanel({ requests, showLabTechnician }: CaseLabReq
                       ) : null}
                     </div>
                     {rep.fileUrl ? (
-                      <a
+                      <ProtectedLink
                         href={resolveUploadUrl(rep.fileUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -152,7 +153,7 @@ export function CaseLabRequestsPanel({ requests, showLabTechnician }: CaseLabReq
                       >
                         <Download className="h-4 w-4" />
                         Open
-                      </a>
+                      </ProtectedLink>
                     ) : null}
                   </li>
                 ))}

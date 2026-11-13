@@ -92,6 +92,15 @@ const ChildCaseSchema = new Schema(
       asqCompleted: { type: Boolean, default: false },
       skippedMchat: { type: Boolean, default: false },
     },
+    /** Organisation (hospital/clinic) the case is registered with. */
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
+    /** Permanent sequential file number, e.g. "CHL-2026-000123" (see services/caseFileNumberService.js). */
+    fileNumber: { type: String, default: undefined, trim: true },
+    fileYear: { type: Number, default: undefined },
+    fileSeq: { type: Number, default: undefined },
+    registeredAt: { type: Date, default: undefined },
+    /** The hospital's own Medical Record (MR) number, entered by the clinician. Unique within an organisation. */
+    mrNumber: { type: String, default: undefined, trim: true },
     /** Last progress-engine case recommendation text (for clinician caseload change detection). */
     progressEngineRecommendationSnapshot: { type: String, default: null },
     progressEngineRecommendationAt: { type: Date, default: null },
@@ -100,6 +109,11 @@ const ChildCaseSchema = new Schema(
 );
 
 ChildCaseSchema.index({ parentId: 1, childId: 1 }, { unique: true });
+ChildCaseSchema.index({ fileNumber: 1 }, { unique: true, partialFilterExpression: { fileNumber: { $type: 'string' } } });
+ChildCaseSchema.index(
+  { organizationId: 1, mrNumber: 1 },
+  { unique: true, partialFilterExpression: { mrNumber: { $type: 'string' } } }
+);
 
 module.exports = {
   ChildCase: mongoose.model('ChildCase', ChildCaseSchema),

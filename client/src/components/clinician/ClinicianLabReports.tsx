@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import { AlertCircle, CheckCircle, FlaskConical, Loader2, Plus } from 'lucide-react';
 import { caseAPI, labRequestsAPI, labTestsAPI } from '../../api';
 import { Button } from '../ui/button';
@@ -46,6 +47,7 @@ type ClinicianRequestRow = {
   notes?: string;
   report_url?: string;
   createdAt?: string;
+  childName?: string;
 };
 
 type Filter = 'ALL' | 'pending' | 'in_progress' | 'completed';
@@ -280,14 +282,14 @@ export function ClinicianLabReports() {
               </div>
               {row.notes ? <p className="mt-2 text-sm text-foreground">{row.notes}</p> : null}
               {row.report_url ? (
-                <a
+                <ProtectedLink
                   href={resolveUploadUrl(row.report_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-block text-sm text-primary hover:underline"
                 >
                   Open report
-                </a>
+                </ProtectedLink>
               ) : null}
             </div>
           ))}

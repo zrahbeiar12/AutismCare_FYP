@@ -16,6 +16,7 @@ import {
 import { cn } from '../../ui/utils';
 import { messageFromAxiosBlobError } from '../../../utils/blobApiError';
 import { toast } from 'sonner';
+import { downloadReportPdf } from '../../reports/downloadReportPdf';
 
 const REPORT_OPTIONS = [
   { value: 'monthly', label: 'Monthly therapy report' },
@@ -151,14 +152,7 @@ export function ReportsCaseTab({
     setDownloadingPdf(true);
     setError(null);
     try {
-      const res = await reportAPI.downloadPdf(selectedId);
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `therapy-report-${selectedId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadReportPdf(selectedId);
       toast.success('PDF downloaded');
     } catch (e: unknown) {
       const msg = await messageFromAxiosBlobError(e);

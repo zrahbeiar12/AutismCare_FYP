@@ -11,44 +11,50 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import type { NavigationItem } from '../layout/DashboardLayout';
+import { STRINGS, type StringKey } from '../../i18n/strings';
 
 /**
  * Parent sidebar order: care path first (children → case → day-to-day care),
  * then scheduling, dual screening entry (questionnaires + facial), history, labs.
  */
-export function getParentNavigationItems(): NavigationItem[] {
+export function getParentNavigationItems(t: (key: StringKey) => string = defaultLabel): NavigationItem[] {
   return [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'children', label: 'My Children', icon: Baby },
+    { id: 'home', label: t('nav.home'), icon: Home },
+    { id: 'children', label: t('nav.children'), icon: Baby },
     {
       id: 'child-case',
-      label: 'Child Case',
+      label: t('nav.childCase'),
       icon: FolderOpen,
       to: '/parent/case',
       activePathPrefix: '/parent/case',
     },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'home-activities', label: 'Home Activities', icon: ListChecks },
-    { id: 'therapy-reports', label: 'Therapy Reports', icon: Stethoscope },
+    { id: 'messages', label: t('nav.messages'), icon: MessageSquare },
+    { id: 'home-activities', label: t('nav.homeActivities'), icon: ListChecks },
+    { id: 'therapy-reports', label: t('nav.therapyReports'), icon: Stethoscope },
     {
       id: 'appointments',
-      label: 'Appointments',
+      label: t('nav.appointments'),
       icon: Calendar,
       children: [
-        { id: 'book-appointment', label: 'Book appointment' },
-        { id: 'appointments', label: 'Appointment status' },
+        { id: 'book-appointment', label: t('nav.bookAppointment') },
+        { id: 'appointments', label: t('nav.appointmentStatus') },
       ],
     },
     {
       id: 'screening',
-      label: 'Screening',
+      label: t('nav.screening'),
       icon: ClipboardList,
       children: [
-        { id: 'screening-questionnaires', label: 'Questionnaires (M-CHAT / ASQ)' },
-        { id: 'facial-screening', label: 'Facial screening' },
+        { id: 'screening-questionnaires', label: t('nav.questionnaires') },
+        { id: 'facial-screening', label: t('nav.facialScreening') },
       ],
     },
-    { id: 'total-screenings', label: 'Screening history', icon: FileText },
-    { id: 'lab-reports', label: 'Lab Reports', icon: FlaskConical },
+    { id: 'total-screenings', label: t('nav.screeningHistory'), icon: FileText },
+    { id: 'lab-reports', label: t('nav.labReports'), icon: FlaskConical },
   ];
+}
+
+function defaultLabel(key: StringKey): string {
+  // English labels without a provider (tests, non-React callers).
+  return STRINGS[key]?.en ?? String(key);
 }

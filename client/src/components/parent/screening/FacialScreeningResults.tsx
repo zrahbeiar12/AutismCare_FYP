@@ -1,4 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
+import { ProtectedImage } from '../../ui/ProtectedMedia';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { Progress } from '../../ui/progress';
@@ -24,6 +26,9 @@ interface FacialScreeningResultsProps {
 }
 
 export function FacialScreeningResults({ results, child }: FacialScreeningResultsProps) {
+  const navigate = useNavigate();
+  /** Jump to another parent dashboard section (ParentDashboard reads `state.section`). */
+  const goTo = (section: string) => navigate('/parent-dashboard', { state: { section } });
   const getRiskTone = (risk: string): 'good' | 'warn' | 'bad' | 'neutral' => {
     switch (risk) {
       case 'low':
@@ -167,7 +172,7 @@ export function FacialScreeningResults({ results, child }: FacialScreeningResult
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-lg overflow-hidden border-2">
-              <img
+              <ProtectedImage
                 src={results.image}
                 alt="Analyzed photo"
                 className="w-full h-48 object-cover"
@@ -292,6 +297,7 @@ export function FacialScreeningResults({ results, child }: FacialScreeningResult
             <Button
               variant="accent"
               className="h-auto py-6 flex-col gap-2"
+              onClick={() => goTo('book-appointment')}
             >
               <Calendar className="w-6 h-6" />
               <span>Schedule Appointment</span>
@@ -300,6 +306,7 @@ export function FacialScreeningResults({ results, child }: FacialScreeningResult
 
             <Button
               className="h-auto py-6 flex-col gap-2 rounded-xl bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90"
+              onClick={() => goTo('screening-questionnaires')}
             >
               <TrendingUp className="w-6 h-6" />
               <span>Complete Full Screening</span>
@@ -309,17 +316,20 @@ export function FacialScreeningResults({ results, child }: FacialScreeningResult
             <Button
               variant="outline"
               className="h-auto py-6 flex-col gap-2 border-2"
+              onClick={() => window.print()}
             >
               <Download className="w-6 h-6" />
               <span>Download Report</span>
+              <span className="text-xs opacity-90">Print or save as PDF</span>
             </Button>
 
             <Button
               variant="outline"
               className="h-auto py-6 flex-col gap-2 border-2"
+              onClick={() => goTo('messages')}
             >
               <Share2 className="w-6 h-6" />
-              <span>Share with Provider</span>
+              <span>Message your care team</span>
             </Button>
           </div>
         </CardContent>

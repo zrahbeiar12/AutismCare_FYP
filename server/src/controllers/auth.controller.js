@@ -22,7 +22,8 @@ const signToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN }
+    // Short sessions by default: a shared clinic computer should not stay signed in for days.
+    { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
   );
 };
 
@@ -30,7 +31,8 @@ const signToken = (user) => {
 exports.register = async (req, res) => {
   try {
     if (shouldLogAuthRegistrationDebug()) {
-      console.log('Registration request body:', req.body);
+      const { password: _pw, confirmPassword: _cpw, ...safeBody } = req.body || {};
+      console.log('Registration request body (password removed):', safeBody);
     }
 
     // 1. Explicitly destructure fields to prevent mass-assignment vulnerabilities

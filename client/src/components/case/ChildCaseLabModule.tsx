@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ProtectedLink } from '../ui/ProtectedMedia';
 import { labRequestsAPI, labTestsAPI } from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -217,7 +218,7 @@ export function ChildCaseLabModule({ childId }: { childId?: string }) {
               </p>
               {row.notes ? <p className="text-sm mt-2 text-foreground">{row.notes}</p> : null}
               {row.report_url ? (
-                <a
+                <ProtectedLink
                   className="inline-flex items-center gap-1 text-sm mt-2 text-primary hover:underline"
                   href={resolveUploadUrl(row.report_url)}
                   target="_blank"
@@ -225,7 +226,7 @@ export function ChildCaseLabModule({ childId }: { childId?: string }) {
                 >
                   <UploadCloud className="h-4 w-4" />
                   Open report
-                </a>
+                </ProtectedLink>
               ) : null}
             </div>
           ))

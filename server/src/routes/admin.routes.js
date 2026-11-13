@@ -1,6 +1,6 @@
 const { getCurrentTime, getCurrentTimeMs } = require('../utils/time.js');
 const express = require('express');
-const { getPendingProfessionals, updateProfessionalStatus, getDashboardMetrics } = require('../controllers/admin.controller');
+const { getPendingProfessionals, updateProfessionalStatus, getDashboardMetrics, listUsers, listOrganizations, createOrganization, setUserOrganization } = require('../controllers/admin.controller');
 const { protect, restrictTo } = require('../middleware/auth.middleware');
 
 const router = express.Router();
@@ -35,6 +35,14 @@ router.use(restrictTo('admin'));
 router.get('/pending-professionals', getPendingProfessionals);
 
 router.get('/dashboard-metrics', getDashboardMetrics);
+
+// User directory (admin User Management)
+router.get('/users', listUsers);
+router.put('/users/:id/organization', adminModerationThrottle, setUserOrganization);
+
+// Organisations (hospitals / clinics) and their file-number codes
+router.get('/organizations', listOrganizations);
+router.post('/organizations', adminModerationThrottle, createOrganization);
 
 // Update professional status (approve/reject)
 router.post('/update-professional-status', adminModerationThrottle, updateProfessionalStatus);

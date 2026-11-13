@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { ChildCase, CASE_LIFECYCLE_STATUS } = require('../models/ChildCase');
+const { assignCaseFileNumber } = require('./caseFileNumberService');
 
 const CASE_EVENTS = {
   CHILD_CREATED: 'CHILD_CREATED',
@@ -136,9 +137,16 @@ function computeTransition({ currentStatus, eventType, payload }) {
       if (clinicianId && !mongoose.Types.ObjectId.isValid(clinicianId)) {
         throw invalidTransition('Invalid clinicianId', { clinicianId });
       }
+      const appointmentId = payload?.appointmentId;
+      // An approved clinician appointment means the clinician is now reviewing the child, so the case moves to
+      // REVIEW even if screening was never finished. Leaving it in NEW/SCREENING hid it from the clinician's
+      // case lists (they only show REVIEW onwards).
       return {
-        toStatus: status === 'REVIEW' ? 'REVIEW' : status,
-        updates: clinicianId ? { clinicianId } : {},
+        toStatus: 'REVIEW',
+        updates: {
+          ...(clinicianId ? { clinicianId } : {}),
+          ...(appointmentId && mongoose.Types.ObjectId.isValid(appointmentId) ? { appointmentId } : {}),
+        },
       };
     }
 
@@ -228,9 +236,11 @@ function computeTransition({ currentStatus, eventType, payload }) {
 async function transitionCase({ caseId, parentId, childId, eventType, payload, triggeredBy }) {
   if (!eventType) throw invalidTransition('eventType is required');
 
-  // For CHILD_CREATED we allow implicit upsert.
+  // CHILD_CREATED and an approved clinician appointment may arrive before any case exists (e.g. a child
+  // added before cases were introduced), so both create the case on demand.
+  const upsertEvents = [CASE_EVENTS.CHILD_CREATED, CASE_EVENTS.CLINICIAN_APPOINTMENT_BOOKED];
   const doc =
-    eventType === CASE_EVENTS.CHILD_CREATED
+    upsertEvents.includes(eventType) && !caseId
       ? await ensureCaseExists({ parentId, childId, triggeredBy })
       : await loadCaseOrThrow({ caseId, parentId, childId });
 
@@ -268,6 +278,19 @@ async function transitionCase({ caseId, parentId, childId, eventType, payload, t
   });
 
   await doc.save();
+
+  // First link to a clinician = registration with that clinician's organisation: issue the case file number.
+  if (doc.clinicianId && !doc.fileNumber) {
+    try {
+      const numbered = await assignCaseFileNumber(doc._id, { clinicianId: doc.clinicianId });
+      if (numbered) {
+        doc.fileNumber = numbered.fileNumber;
+        doc.organizationId = numbered.organizationId;
+      }
+    } catch (e) {
+      console.error('[caseLifecycle] file number assignment failed:', e?.message || e);
+    }
+  }
   return doc;
 }
 

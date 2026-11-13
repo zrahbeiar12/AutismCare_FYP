@@ -1,6 +1,8 @@
+import { UserManagementTable } from '../components/admin/UserManagementTable';
+import { OrganizationsPanel } from '../components/admin/OrganizationsPanel';
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, Clock, ShieldCheck, TrendingUp, Users } from "lucide-react";
+import { Building2, Calendar, Clock, ShieldCheck, TrendingUp, Users } from "lucide-react";
 import { DashboardLayout } from "../components/layout/DashboardLayout";
 import {
   DashboardCard,
@@ -54,13 +56,15 @@ const navigation = [
   { id: "appointments", label: "Appointments", icon: Calendar },
   { id: "clinical-iq", label: "Clinical IQ", icon: TrendingUp },
   { id: "users", label: "User Management", icon: Users },
+  { id: "organizations", label: "Organisations", icon: Building2 },
 ];
 
 const menuItems = {
   approvals: ApprovalRequests,
   appointments: AdminAppointments,
   "clinical-iq": AdminClinicalIQ,
-  users: () => <EmptyState title="No data available" description="User management features will appear here soon." />,
+  users: UserManagementTable,
+  organizations: OrganizationsPanel,
 };
 
 export default function AdminDashboard() {

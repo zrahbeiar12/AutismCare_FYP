@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardLayout } from '../layout/DashboardLayout';
 import { ParentCaseIntegrationPanels } from './ParentCaseIntegrationPanels';
 import { getParentNavigationItems } from './parentNavigation';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 interface ParentChildCasePageProps {
   onLogout?: () => void;
@@ -14,7 +15,8 @@ interface ParentChildCasePageProps {
 export function ParentChildCasePage({ onLogout }: ParentChildCasePageProps): ReactNode {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
-  const navigation = getParentNavigationItems();
+  const { t } = useLanguage();
+  const navigation = getParentNavigationItems(t);
 
   const handleSectionChange = (section: string) => {
     navigate('/parent-dashboard', { state: { section } });

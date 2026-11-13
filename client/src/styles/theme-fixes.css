@@ -1,0 +1,109 @@
+/*
+ * Theme fixes (loaded last).
+ *
+ * 1) Restored backgrounds — a few buttons/badges pair `text-white` with a background class that the
+ *    frozen Tailwind snapshot (index.css) never contained, so they rendered as white text on nothing.
+ *    These rules restore exactly the colour each component already asks for. Nothing else is recoloured.
+ *
+ * 2) Dark mode — only ~30 hard-coded palette classes actually render from index.css. The light ones
+ *    (`bg-white`, `bg-*-50`, dark `text-*-900`) had no `dark:` counterpart, so in dark mode they showed
+ *    white panels under light text. Under `.dark` they now map onto the existing theme tokens
+ *    (`--card`, `--border`, …) or a lighter tint of the same hue. Light mode is untouched.
+ */
+
+/* ── 1) Restored backgrounds (light + dark) ───────────────────────────── */
+.bg-sky-500\/80 { background-color: rgb(14 165 233 / 0.8); }
+@media (hover: hover) {
+  .hover\:bg-sky-500\/90:hover { background-color: rgb(14 165 233 / 0.9); }
+}
+.active\:bg-sky-500:active { background-color: rgb(14 165 233); }
+.bg-red-600 { background-color: #dc2626; }
+.bg-slate-900 { background-color: #0f172a; }
+.bg-blue-700 { background-color: #1d4ed8; }
+
+.dark .bg-slate-900 {
+  background-color: var(--primary);
+}
+
+/* ── 2) Dark mode for hard-coded light palette classes ────────────────── */
+/* `--primary` stays navy (#1e3a8a) in dark mode, which is right for filled buttons but unreadable as text on
+   the dark cards (~1.5:1). Text uses the theme's own dark-mode blue (--chart-1 in .dark) instead. */
+.dark .text-primary { color: #60a5fa; }
+
+.dark .bg-white { background-color: var(--card); }
+.dark .border-white { border-color: var(--card); }
+
+.dark .bg-blue-50 { background-color: color-mix(in oklab, #3b82f6 14%, var(--card)); }
+.dark .bg-blue-100 { background-color: color-mix(in oklab, #3b82f6 24%, var(--card)); }
+.dark .bg-green-50 { background-color: color-mix(in oklab, #22c55e 12%, var(--card)); }
+.dark .bg-green-100 { background-color: color-mix(in oklab, #22c55e 22%, var(--card)); }
+.dark .bg-teal-50 { background-color: color-mix(in oklab, #14b8a6 12%, var(--card)); }
+
+.dark .from-blue-50 { --tw-gradient-from: color-mix(in oklab, #3b82f6 14%, var(--card)); }
+.dark .to-blue-50 { --tw-gradient-to: color-mix(in oklab, #3b82f6 14%, var(--card)); }
+.dark .from-yellow-50 { --tw-gradient-from: color-mix(in oklab, #eab308 12%, var(--card)); }
+
+.dark .border-blue-200,
+.dark .border-blue-300 { border-color: color-mix(in oklab, #3b82f6 40%, var(--border)); }
+.dark .border-green-200 { border-color: color-mix(in oklab, #22c55e 35%, var(--border)); }
+.dark .border-yellow-200 { border-color: color-mix(in oklab, #eab308 35%, var(--border)); }
+
+.dark .text-blue-900 { color: #bfdbfe; }
+.dark .text-blue-600 { color: #93c5fd; }
+.dark .text-green-900 { color: #bbf7d0; }
+.dark .text-green-700,
+.dark .text-green-600 { color: #86efac; }
+.dark .text-yellow-900 { color: #fef08a; }
+.dark .text-yellow-700,
+.dark .text-yellow-600 { color: #fde047; }
+.dark .text-red-700,
+.dark .text-red-600 { color: #fca5a5; }
+
+/* ── 3) Screening risk badges + ASQ-3 domain chips (Case directory) ───── */
+.risk-low,
+.risk-medium,
+.risk-high,
+.risk-unknown { border-width: 1px; border-style: solid; }
+.risk-low { background-color: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.risk-medium { background-color: #fffbeb; color: #92400e; border-color: #fde68a; }
+.risk-high { background-color: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.risk-unknown { background-color: var(--muted); color: var(--muted-foreground); border-color: var(--border); }
+
+.zone-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid;
+  padding: 0.0625rem 0.5rem;
+  font-size: 0.6875rem;
+  line-height: 1.1rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.zone-ok { background-color: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.zone-monitor { background-color: #fffbeb; color: #92400e; border-color: #fde68a; }
+.zone-refer { background-color: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.zone-incomplete,
+.zone-unknown { background-color: var(--muted); color: var(--muted-foreground); border-color: var(--border); border-style: dashed; }
+
+.dark .risk-low,
+.dark .zone-ok { background-color: color-mix(in oklab, #22c55e 16%, var(--card)); color: #86efac; border-color: color-mix(in oklab, #22c55e 40%, var(--border)); }
+.dark .risk-medium,
+.dark .zone-monitor { background-color: color-mix(in oklab, #f59e0b 16%, var(--card)); color: #fcd34d; border-color: color-mix(in oklab, #f59e0b 40%, var(--border)); }
+.dark .risk-high,
+.dark .zone-refer { background-color: color-mix(in oklab, #ef4444 18%, var(--card)); color: #fca5a5; border-color: color-mix(in oklab, #ef4444 45%, var(--border)); }
+
+/* ── 4) Urdu text and easy-reading mode ──────────────────────────────── */
+html[data-lang="ur"] body {
+  font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Urdu Typesetting", system-ui, sans-serif;
+}
+html[data-lang="ur"] [dir="auto"],
+html[data-lang="ur"] .ur-text {
+  line-height: 2.1;
+}
+/* Easy reading: larger question text and answer buttons for parents with low literacy or poor eyesight. */
+html.easy-read .q-text { font-size: 1.25rem; line-height: 1.8; }
+html.easy-read .q-option { min-height: 3.75rem; font-size: 1.125rem; }
+html.easy-read aside nav,
+html.easy-read main { font-size: 1.0625rem; }

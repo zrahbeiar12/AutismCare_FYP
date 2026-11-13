@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ProtectedImage, ProtectedVideo } from '../ui/ProtectedMedia';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -439,9 +440,9 @@ export function ParentHomeAssignments() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Submission</p>
                         <p className="text-xs text-muted-foreground">{ps?.submittedAt ? new Date(ps.submittedAt).toLocaleString() : ''}</p>
                         {ps.fileType === 'image' ? (
-                          <img src={fileAbs} alt="" className="mt-2 max-h-48 rounded-md border object-contain" />
+                          <ProtectedImage src={fileAbs} alt="" className="mt-2 max-h-48 rounded-md border object-contain" />
                         ) : ps.fileType === 'video' ? (
-                          <video src={fileAbs} className="mt-2 max-h-48 w-full rounded-md border" controls />
+                          <ProtectedVideo src={fileAbs} className="mt-2 max-h-48 w-full rounded-md border" controls />
                         ) : null}
                       </div>
                     ) : null}

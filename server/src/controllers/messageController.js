@@ -119,6 +119,11 @@ exports.listConversations = async (req, res) => {
       .select('firstName lastName children')
       .lean();
     const parentById = new Map(parents.map((p) => [String(p._id), p]));
+    const therapistIds = [...new Set(list.map((c) => String(c.therapistId || '')).filter(Boolean))];
+    const therapists = therapistIds.length
+      ? await User.find({ _id: { $in: therapistIds } }).select('firstName lastName').lean()
+      : [];
+    const therapistById = new Map(therapists.map((t) => [String(t._id), `${t.firstName || ''} ${t.lastName || ''}`.trim()]));
 
     const convIds = list.map((c) => c._id);
     const lastMsgs = await Message.aggregate([
@@ -146,6 +151,7 @@ exports.listConversations = async (req, res) => {
         ...conv,
         childName,
         parentName,
+        therapistName: therapistById.get(String(conv.therapistId || '')) || 'Therapist',
         preview: last ? String(last.text || '').slice(0, 200) : '',
         previewAt: last?.createdAt || conv.lastMessageAt,
       };
@@ -233,6 +239,8 @@ exports.getOrCreateConversation = async (req, res) => {
     const parent = await User.findById(caseDoc.parentId).select('firstName lastName children').lean();
     const childName = childNameFromParent(parent, caseDoc.childId);
     const parentName = parent ? `${parent.firstName || ''} ${parent.lastName || ''}`.trim() : 'Parent';
+    const therapist = conv.therapistId ? await User.findById(conv.therapistId).select('firstName lastName').lean() : null;
+    const therapistName = therapist ? `${therapist.firstName || ''} ${therapist.lastName || ''}`.trim() : 'Therapist';
 
     return res.status(200).json({
       success: true,
@@ -240,6 +248,7 @@ exports.getOrCreateConversation = async (req, res) => {
         ...conv,
         childName,
         parentName,
+        therapistName,
       },
     });
   } catch (e) {

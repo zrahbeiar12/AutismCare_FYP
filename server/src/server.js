@@ -71,10 +71,15 @@ app.use(cors({
         : ['http://localhost:4173', 'http://localhost:5173'])
     : true,
   credentials: true,
+  // Lets the browser read the report PDF file name across origins (client and API are on different hosts).
+  exposedHeaders: ['Content-Disposition'],
 }));
 
 app.use(express.json());
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Uploaded files are patient data: signed-in users only, and only files they may see (see uploadAccess.middleware).
+const { protect: requireLogin } = require('./middleware/auth.middleware');
+const { authorizeUploadAccess } = require('./middleware/uploadAccess.middleware');
+app.use('/uploads', requireLogin, authorizeUploadAccess, express.static(path.join(process.cwd(), 'uploads'), { index: false, dotfiles: 'deny' }));
 
 /* Rate limiter */
 const messagingLimiter = rateLimit({
@@ -179,6 +184,16 @@ const startServer = async () => {
     await connectDB();
 
     console.log('✅ MongoDB connected');
+
+    // Make sure the default organisation exists and every registered case has a sequential file number.
+    try {
+      const { getDefaultOrganization, backfillCaseFileNumbers } = require('./services/caseFileNumberService.js');
+      await getDefaultOrganization();
+      const numbered = await backfillCaseFileNumbers();
+      if (numbered) console.log(`🗂️  Assigned file numbers to ${numbered} existing case(s)`);
+    } catch (err) {
+      console.error('[startup] case file numbering failed:', err?.message || err);
+    }
 
     // Non-critical: best-effort SMTP verification (never crashes server)
     try {

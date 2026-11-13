@@ -55,8 +55,6 @@ export const childAPI = {
   updateChild: (childId, childData) => API.put(`/child/${childId}`, childData),
   deleteChild: (childId) => API.delete(`/child/${childId}`),
   getChildScreeningStatus: (childId) => API.get(`/screening/child/${childId}/screening-status`),
-  getChildScreeningsCount: (childId) => API.get(`/screening/child/${childId}/count`),
-  getChildScreenings: (childId) => API.get(`/screening/child/${childId}`)
 };
 
 export const screeningAPI = {
@@ -249,6 +247,7 @@ export const clinicianAPI = {
 export const caseAPI = {
   list: (params) => API.get('cases', { params }),
   getById: (id) => API.get(`cases/${id}`),
+  updateMrNumber: (id, mrNumber) => API.patch(`cases/${id}/mr-number`, { mrNumber }),
 };
 
 // Clinical evaluations (clinician only)
@@ -270,6 +269,7 @@ export const referralAPI = {
   getAssigned: () => API.get('referrals/assigned'),
   accept: (id) => API.patch(`referrals/${id}/accept`),
   start: (id) => API.patch(`referrals/${id}/start`),
+  letterPdf: (id) => API.get(`referrals/${id}/letter`, { responseType: 'blob' }),
 };
 
 // Therapy oversight (clinician read-only on therapy data + recommendation notes)

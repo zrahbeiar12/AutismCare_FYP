@@ -1,13 +1,11 @@
-const { ChildCase } = require('../models/ChildCase');
+const { ChildCase, CASE_LIFECYCLE_STATUS } = require('../models/ChildCase');
 const { User } = require('../models/User');
-const TherapyPlan = require('../models/TherapyPlan');
-const SessionLog = require('../models/SessionLog');
-const { HomeAssignment } = require('../models/HomeAssignment');
-const { buildProgressEnginePayload } = require('../services/progressEngine');
+const { buildProgressEnginePayload, loadCaseProgressInputs } = require('../services/progressEngine');
 const { scheduleEmitClinicalEvent, slimProgressSnapshot } = require('../services/clinicalEventService');
 const { buildCrossDomainInsights, getLabContextForCase } = require('../services/clinicalCorrelationService');
 
-const CLINICIAN_ALLOWED = ['REVIEW', 'DIAGNOSIS', 'DIAGNOSIS_READY', 'THERAPY', 'THERAPY_ACTIVE', 'MONITORING'];
+// Every lifecycle stage: a case assigned to this clinician belongs on their caseload (matches GET /api/cases).
+const CLINICIAN_ALLOWED = CASE_LIFECYCLE_STATUS;
 
 function normalizeCaseStatus(value) {
   if (value == null) return '';
@@ -82,32 +80,10 @@ exports.getCaseloadProgress = async (req, res) => {
       .lean();
     const parentMap = new Map(parents.map((p) => [p._id.toString(), p]));
 
-    const oids = cases.map((c) => c._id);
-    const [allPlans, allSessions, allAssigns] = await Promise.all([
-      TherapyPlan.find({ caseId: { $in: oids } }).sort({ updatedAt: -1 }).lean(),
-      SessionLog.find({ caseId: { $in: oids } }).sort({ sessionDate: 1 }).lean(),
-      HomeAssignment.find({ caseId: { $in: oids } }).lean(),
-    ]);
-
-    const planByCase = new Map();
-    for (const p of allPlans) {
-      const id = String(p.caseId);
-      if (!planByCase.has(id)) planByCase.set(id, p);
-    }
-
-    const sessionsByCase = new Map();
-    for (const s of allSessions) {
-      const id = String(s.caseId);
-      if (!sessionsByCase.has(id)) sessionsByCase.set(id, []);
-      sessionsByCase.get(id).push(s);
-    }
-
-    const assignsByCase = new Map();
-    for (const a of allAssigns) {
-      const id = String(a.caseId);
-      if (!assignsByCase.has(id)) assignsByCase.set(id, []);
-      assignsByCase.get(id).push(a);
-    }
+    // Same canonical inputs as parent/therapist views and reports (primary plan + that therapist's data), so the
+    // caseload shows the same progress figures every other screen shows for the child.
+    const inputsList = await Promise.all(cases.map((c) => loadCaseProgressInputs(String(c._id))));
+    const inputsByCase = new Map(cases.map((c, i) => [String(c._id), inputsList[i]]));
 
     const rows = [];
     const bulkOps = [];
@@ -125,9 +101,10 @@ exports.getCaseloadProgress = async (req, res) => {
       let loadError = null;
       let engine = null;
       try {
-        const plan = planByCase.get(idStr) || null;
-        const sessions = sessionsByCase.get(idStr) || [];
-        const assigns = assignsByCase.get(idStr) || [];
+        const inputs = inputsByCase.get(idStr) || { plan: null, sessions: [], assignments: [] };
+        const plan = inputs.plan;
+        const sessions = inputs.sessions;
+        const assigns = inputs.assignments;
         engine = buildProgressEnginePayload({
           caseId: idStr,
           plan,

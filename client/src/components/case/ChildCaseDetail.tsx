@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { caseAPI, progressEngineAPI } from '../../api';
+import { CaseFileNumbers } from './CaseFileNumbers';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -284,6 +285,7 @@ export function ChildCaseDetail({ caseId, onBack, initialTab = 'overview' }: Chi
                     <CardDescription>Linked from parent account</CardDescription>
                   </CardHeader>
                   <CardContent className="pt-6 space-y-4 text-sm">
+                    <CaseFileNumbers caseId={String(caseId)} fileNumber={data.fileNumber} mrNumber={data.mrNumber} />
                     {data.childProfile ? (
                       <>
                         <div className="grid grid-cols-2 gap-3">

@@ -86,7 +86,9 @@ export function GoalProgressLineChart({ data, className, explanationSnippet, hei
           <XAxis dataKey="x" tick={{ fontSize: 11, fill: '#64748b' }} height={36} />
           <YAxis domain={[0, 5]} tick={{ fontSize: 11, fill: '#64748b' }} />
           <Tooltip
-            content={(props) => <GoalLineTooltip {...props} explanationSnippet={explanationSnippet} />}
+            content={(props) => (
+              <GoalLineTooltip {...(props as React.ComponentProps<typeof GoalLineTooltip>)} explanationSnippet={explanationSnippet} />
+            )}
           />
           {hasSmoothed ? <Legend wrapperStyle={{ fontSize: 12 }} /> : null}
           <Line

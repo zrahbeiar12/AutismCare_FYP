@@ -6,8 +6,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Search, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Search, CheckCircle, XCircle, RotateCcw, Ban } from 'lucide-react';
 import API from '../../api';
+import { fetchOrganizations, type Organization } from './OrganizationsPanel';
 
 interface User {
   _id: string;
@@ -18,20 +19,38 @@ interface User {
   approvalStatus?: string;
   specialization?: string;
   createdAt: string;
+  organizationId?: string | null;
 }
 
-interface UserManagementTableProps {
-  onEditUser?: (user: User) => void;
-}
+const ALL = 'all';
+const PROFESSIONAL_ROLES = ['clinician', 'therapist', 'lab'];
 
-export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
+export function UserManagementTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState(ALL);
+  const [statusFilter, setStatusFilter] = useState(ALL);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+
+  useEffect(() => {
+    fetchOrganizations().then(setOrgs).catch(() => setOrgs([]));
+  }, []);
+
+  const setOrganization = async (userId: string, organizationId: string) => {
+    setBusyId(userId);
+    try {
+      await API.put(`/admin/users/${userId}/organization`, { organizationId });
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to assign organisation');
+    } finally {
+      setBusyId(null);
+    }
+  };
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -53,8 +72,8 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
         limit: '10'
       });
 
-      if (roleFilter) params.append('role', roleFilter);
-      if (statusFilter) params.append('status', statusFilter);
+      if (roleFilter !== ALL) params.append('role', roleFilter);
+      if (statusFilter !== ALL) params.append('status', statusFilter);
 
       const response = await API.get(`/admin/users?${params}`);
       setUsers(response.data.users || []);
@@ -66,23 +85,16 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
     }
   };
 
-  const handleStatusUpdate = async (userId: string, status: string) => {
+  /** Same audited endpoint as Pending Approvals; only professionals (clinician, therapist, lab) have a status. */
+  const handleStatusUpdate = async (userId: string, status: 'active' | 'rejected') => {
+    setBusyId(userId);
     try {
-      await API.put(`/admin/users/${userId}/status`, { status });
-      fetchUsers();
+      await API.post('/admin/update-professional-status', { userId, status });
+      await fetchUsers();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to update user status');
-    }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
-    try {
-      await API.delete(`/admin/users/${userId}`);
-      fetchUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -141,7 +153,7 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
                 <SelectValue placeholder="Filter by role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Roles</SelectItem>
+                <SelectItem value={ALL}>All roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="clinician">Clinician</SelectItem>
                 <SelectItem value="therapist">Therapist</SelectItem>
@@ -154,7 +166,7 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value={ALL}>All statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
@@ -171,6 +183,7 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Specialization</TableHead>
+                  <TableHead>Organisation</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -183,7 +196,7 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <Badge className={getRoleColor(user.role)}>
+                      <Badge variant="outline" className={getRoleColor(user.role)}>
                         {user.role}
                       </Badge>
                     </TableCell>
@@ -196,44 +209,57 @@ export function UserManagementTable({ onEditUser }: UserManagementTableProps) {
                     </TableCell>
                     <TableCell>{user.specialization || '-'}</TableCell>
                     <TableCell>
+                      {user.role === 'parent' ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <Select
+                          value={user.organizationId || orgs.find((o) => o.isDefault)?._id || undefined}
+                          onValueChange={(v) => void setOrganization(user._id, v)}
+                          disabled={busyId === user._id || orgs.length === 0}
+                        >
+                          <SelectTrigger className="h-8 w-40">
+                            <SelectValue placeholder="Organisation" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {orgs.map((o) => (
+                              <SelectItem key={o._id} value={o._id}>
+                                {o.code} · {o.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {new Date(user.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
-                        {user.role !== 'admin' && user.approvalStatus === 'pending' && (
+                      <div className="flex flex-wrap gap-2">
+                        {PROFESSIONAL_ROLES.includes(user.role) && user.approvalStatus === 'pending' ? (
                           <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleStatusUpdate(user._id, 'active')}
-                              variant="default"
-                            >
-                              <CheckCircle className="h-4 w-4" />
+                            <Button size="sm" disabled={busyId === user._id} onClick={() => handleStatusUpdate(user._id, 'active')}>
+                              <CheckCircle className="mr-1 h-4 w-4" />
+                              Approve
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleStatusUpdate(user._id, 'rejected')}
-                            >
-                              <XCircle className="h-4 w-4" />
+                            <Button size="sm" variant="destructive" disabled={busyId === user._id} onClick={() => handleStatusUpdate(user._id, 'rejected')}>
+                              <XCircle className="mr-1 h-4 w-4" />
+                              Reject
                             </Button>
                           </>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onEditUser?.(user)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {user.role !== 'admin' && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteUser(user._id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
+                        ) : null}
+                        {PROFESSIONAL_ROLES.includes(user.role) && user.approvalStatus === 'active' ? (
+                          <Button size="sm" variant="outline" disabled={busyId === user._id} onClick={() => handleStatusUpdate(user._id, 'rejected')}>
+                            <Ban className="mr-1 h-4 w-4" />
+                            Deactivate
                           </Button>
-                        )}
+                        ) : null}
+                        {PROFESSIONAL_ROLES.includes(user.role) && user.approvalStatus === 'rejected' ? (
+                          <Button size="sm" variant="outline" disabled={busyId === user._id} onClick={() => handleStatusUpdate(user._id, 'active')}>
+                            <RotateCcw className="mr-1 h-4 w-4" />
+                            Reactivate
+                          </Button>
+                        ) : null}
+                        {!PROFESSIONAL_ROLES.includes(user.role) ? <span className="text-xs text-muted-foreground">No actions</span> : null}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -8,6 +8,7 @@ const {
   startReferral,
 } = require('../controllers/referralController');
 const { protect, restrictTo, requireOwnership } = require('../middleware/auth.middleware');
+const { getReferralLetter } = require('../controllers/referralLetterController');
 const { validateCaseState } = require('../middleware/validateCaseState');
 const { ACTIONS } = require('../services/actionPermissionService');
 
@@ -36,5 +37,8 @@ router.patch(
   // startReferral will load referral to get caseId; keep server-side guard in controller too
   startReferral
 );
+
+// Printable referral letter (PDF): referring clinician, therapist with case access, admin.
+router.get('/:id/letter', restrictTo('clinician', 'therapist', 'admin'), getReferralLetter);
 
 module.exports = router;

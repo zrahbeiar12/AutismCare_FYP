@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ProtectedLink, ProtectedImage, ProtectedVideo } from '../../ui/ProtectedMedia';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Textarea } from '../../ui/textarea';
@@ -167,22 +168,22 @@ export function HomeAssignmentsCaseTab({ caseId, data, onRefresh }: Props) {
                           {ps.submittedAt ? new Date(ps.submittedAt).toLocaleString() : ''} · {ps.fileType || 'file'}
                         </p>
                         {ps.fileType === 'image' ? (
-                          <img
+                          <ProtectedImage
                             src={fileAbs}
                             alt="Submission"
                             className="mt-2 max-h-56 rounded-md border object-contain"
                           />
                         ) : ps.fileType === 'video' ? (
-                          <video src={fileAbs} className="mt-2 max-h-56 w-full rounded-md border" controls />
+                          <ProtectedVideo src={fileAbs} className="mt-2 max-h-56 w-full rounded-md border" controls />
                         ) : (
-                          <a
+                          <ProtectedLink
                             href={fileAbs}
                             target="_blank"
                             rel="noreferrer"
                             className="mt-2 inline-block text-sm text-primary underline"
                           >
                             Open file
-                          </a>
+                          </ProtectedLink>
                         )}
                       </div>
                     ) : null}
@@ -197,7 +198,7 @@ export function HomeAssignmentsCaseTab({ caseId, data, onRefresh }: Props) {
                       </div>
                     ) : null}
 
-                    {showReview && st !== 'completed' ? (
+                    {showReview ? (
                       <div className="mt-4 border-t border pt-4">
                         {reviewId === String(a._id) ? (
                           <div className="space-y-3">
