@@ -104,6 +104,8 @@ async function mapCaseDetails(caseDoc) {
 
   return {
     caseId: caseDoc._id,
+    // Case lifecycle status: the therapist Assigned Cases UI shows "Start therapy" only when this is THERAPY.
+    status: caseDoc.status,
     child,
     parent: parent
       ? {

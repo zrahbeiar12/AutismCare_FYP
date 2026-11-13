@@ -7,6 +7,7 @@ const mongoose = require(path.resolve(serverRoot, 'node_modules/mongoose'));
 const { User } = require(path.resolve(serverRoot, 'src/models/User.js'));
 const LabTestRequest = require(path.resolve(serverRoot, 'src/models/LabTestRequest.js'));
 const LabReport = require(path.resolve(serverRoot, 'src/models/LabReport.js'));
+const { ChildCase } = require(path.resolve(serverRoot, 'src/models/ChildCase.js'));
 
 const password = 'Password123!';
 const API_BASE = process.env.E2E_API_BASE_URL || 'http://127.0.0.1:4000';
@@ -54,6 +55,7 @@ test.describe.serial('Lab release flow (clinician -> parent)', () => {
   let clinicianId = '';
   let childId = '';
   let requestId = '';
+  let caseId = '';
 
   test.beforeAll(async ({ request }) => {
     await mongoose.connect(MONGO_URI);
@@ -94,11 +96,21 @@ test.describe.serial('Lab release flow (clinician -> parent)', () => {
     });
     clinicianId = String(clinician._id);
 
+    // Lab requests are gated to a case in DIAGNOSIS by the case lifecycle (validateCaseState).
+    const createdCase = await ChildCase.create({
+      parentId,
+      childId,
+      clinicianId,
+      status: 'DIAGNOSIS',
+    });
+    caseId = String(createdCase._id);
+
     // Create test request via clinician API
     const clinicianToken = await apiLogin(request, clinicianEmail);
     const createRes = await request.post(`${API_BASE}/api/lab/clinician/requests`, {
       headers: { Authorization: `Bearer ${clinicianToken}` },
       data: {
+        caseId,
         parentId,
         childId,
         childName: 'Lab Child',
@@ -131,6 +143,7 @@ test.describe.serial('Lab release flow (clinician -> parent)', () => {
       await LabReport.deleteMany({ testRequestId: requestId });
       await LabTestRequest.deleteMany({ _id: requestId });
     }
+    if (caseId) await ChildCase.deleteMany({ _id: caseId });
     await User.deleteMany({ email: { $in: [parentEmail, clinicianEmail] } });
     await mongoose.disconnect();
   });

@@ -105,6 +105,12 @@ test.describe.serial('Browser authentication workflows', () => {
     });
     const createdCaseBody = await createdCaseResponse.json();
     caseId = String(createdCaseBody.data?._id || createdCaseBody.data?.id || '');
+
+    // Legacy /api/cases/create opens the case in NEW. Clinicians only see/evaluate cases from REVIEW
+    // onwards (case lifecycle), which a submitted screening normally produces; simulate that state.
+    if (caseId) {
+      await ChildCase.updateOne({ _id: caseId }, { $set: { status: 'REVIEW' } });
+    }
   });
 
   test.afterAll(async () => {
@@ -241,9 +247,13 @@ test.describe.serial('Browser authentication workflows', () => {
     await page.locator('form').getByRole('button', { name: /^login$/i }).click();
 
     await expect(page).toHaveURL(/\/clinician-dashboard$/);
-    await expect(page.locator('h2', { hasText: /clinician dashboard/i })).toBeVisible();
+    // Clinician home is the "Clinical overview" section (ClinicalOverview, redesigned in fa2eb6e).
+    await expect(page.locator('h2', { hasText: /clinical overview/i })).toBeVisible();
 
-    await page.getByRole('complementary').getByRole('button', { name: /^child cases$/i }).click();
+    // The case list is "Case directory" inside the collapsed "Workflows" sidebar group.
+    const sidebar = page.getByRole('complementary');
+    await sidebar.getByRole('button', { name: /^workflows$/i }).click();
+    await sidebar.getByRole('button', { name: /^case directory$/i }).click();
     await expect(page.getByRole('heading', { name: /child cases/i })).toBeVisible();
     await expect(page.getByText(/case child/i)).toBeVisible();
     await expect(page.getByText(parentEmail)).toBeVisible();
@@ -264,6 +274,7 @@ test.describe.serial('Browser authentication workflows', () => {
 
     let createdChildId = '';
     let createdAppointmentId = '';
+    let createdCaseId = '';
 
     try {
       const parentLogin = await request.post('http://127.0.0.1:4000/api/auth/login', {
@@ -286,9 +297,19 @@ test.describe.serial('Browser authentication workflows', () => {
       const childBody = await childResponse.json();
       createdChildId = String(childBody.data?.id || childBody.data?._id || '');
 
+      // Creating the child opens its case in NEW. Booking is gated to REVIEW (screening submitted)
+      // and requires the caseId; simulate the submitted screening.
+      const childCase = await ChildCase.findOneAndUpdate(
+        { parentId, childId: createdChildId },
+        { $set: { status: 'REVIEW' } },
+        { new: true }
+      );
+      createdCaseId = String(childCase?._id || '');
+
       const appointmentResponse = await request.post('http://127.0.0.1:4000/api/appointments', {
         headers: { Authorization: `Bearer ${parentToken}` },
         multipart: {
+          caseId: createdCaseId,
           childId: createdChildId,
           appointmentType: 'DIAGNOSTIC',
           professionalId: clinicianId,
@@ -308,7 +329,10 @@ test.describe.serial('Browser authentication workflows', () => {
       await page.locator('form').getByRole('button', { name: /^login$/i }).click();
 
       await expect(page).toHaveURL(/\/clinician-dashboard$/);
-      await page.getByRole('button', { name: /^appointments$/i }).click();
+      // Appointments is inside the collapsed "Operations" sidebar group.
+      const sidebar = page.getByRole('complementary');
+      await sidebar.getByRole('button', { name: /^operations$/i }).click();
+      await sidebar.getByRole('button', { name: /^appointments$/i }).click();
 
       await expect(page.getByRole('heading', { name: /appointments management/i })).toBeVisible();
       await expect(page.getByText(new RegExp(`${childFirstName} ${childLastName}`, 'i'))).toBeVisible();
@@ -319,7 +343,8 @@ test.describe.serial('Browser authentication workflows', () => {
 
       await expect(page.locator('span[data-slot="badge"]').filter({ hasText: 'Approved' })).toBeVisible();
 
-      await page.getByRole('button', { name: /^child cases$/i }).click();
+      await sidebar.getByRole('button', { name: /^workflows$/i }).click();
+      await sidebar.getByRole('button', { name: /^case directory$/i }).click();
       await expect(page.getByRole('heading', { name: /child cases/i })).toBeVisible();
       await expect(page.getByText(new RegExp(`${childFirstName} ${childLastName}`, 'i'))).toBeVisible();
     } finally {
@@ -332,11 +357,9 @@ test.describe.serial('Browser authentication workflows', () => {
           { $pull: { children: { _id: createdChildId } } }
         );
       }
-      await ChildCase.deleteMany({
-        clinicianId,
-        parentId,
-        appointmentId: createdAppointmentId,
-      });
+      if (createdCaseId) {
+        await ChildCase.deleteMany({ _id: createdCaseId });
+      }
     }
   });
 
@@ -354,6 +377,9 @@ test.describe.serial('Browser authentication workflows', () => {
           diagnosis: 'ASD indicators requiring therapy referral',
           recommendations: 'Start speech therapy pathway',
           status: 'final',
+          // Finalizing requires a disposition; REFER_THERAPY moves the case to DIAGNOSIS_READY,
+          // which is what allows the referral below.
+          finalDisposition: 'REFER_THERAPY',
         },
       });
       expect(evaluationResponse.ok()).toBeTruthy();
@@ -396,7 +422,8 @@ test.describe.serial('Browser authentication workflows', () => {
       await page.getByRole('tab', { name: /therapy plans/i }).click();
 
       // Assert new, refactored plan UI elements exist.
-      await expect(page.getByText(/^therapy plan$/i)).toBeVisible();
+      // Card title heading (the builder's help text also contains a bold "Therapy plan").
+      await expect(page.getByRole('heading', { name: /^therapy plan$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /^save draft$/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /submit plan|submit therapy plan/i })).toBeVisible();
 

@@ -115,7 +115,8 @@ test.describe.serial('Home assignment loop (parent submit -> therapist review ->
       parentId,
       childId,
       clinicianId,
-      status: 'active',
+      // Assignment routes are gated to THERAPY_ACTIVE by the case lifecycle (validateCaseState).
+      status: 'THERAPY_ACTIVE',
     });
     caseId = String(createdCase._id);
 

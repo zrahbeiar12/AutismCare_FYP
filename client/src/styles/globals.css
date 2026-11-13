@@ -395,3 +395,50 @@ html {
     }
   }
 }
+
+/*
+ * Dialog positioning (components/ui/dialog.tsx).
+ * index.css is a static Tailwind snapshot that never included the utilities the dialog relies on
+ * (fixed, top-[50%], left-[50%], translate-*-[-50%], z-[1200/1201], bg-black/50, max-w-*, max-h-*, top-4),
+ * so dialogs rendered in normal flow at the bottom of the page. These rules restore exactly what the
+ * dialog's own classes specify. They live in @layer base (ordered before utilities) and use :where()
+ * (zero specificity), so any utility class that does exist in index.css still wins.
+ * `translate` (not `transform`) matches Tailwind v4 and doesn't clash with the open/close animation.
+ */
+@layer base {
+  :where([data-slot="dialog-overlay"]) {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background-color: rgb(0 0 0 / 0.5);
+  }
+
+  :where([data-slot="dialog-content"]) {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 1201;
+    translate: -50% -50%;
+    width: 100%;
+    max-width: calc(100% - 2rem);
+    max-height: min(90vh, 44rem);
+  }
+
+  /* Width classes used on DialogContent that are also missing from index.css (Tailwind v4 sizes). */
+  :where([data-slot="dialog-content"][class~="max-w-md"]) { max-width: 28rem; }
+  :where([data-slot="dialog-content"][class~="max-w-lg"]) { max-width: 32rem; }
+  :where([data-slot="dialog-content"][class~="max-w-2xl"]) { max-width: 42rem; }
+
+  @media (min-width: 40rem) {
+    :where([data-slot="dialog-content"][class~="sm:max-w-md"]) { max-width: 28rem; }
+    :where([data-slot="dialog-content"][class~="sm:max-w-lg"]) { max-width: 32rem; }
+    :where([data-slot="dialog-content"][class~="sm:max-w-xl"]) { max-width: 36rem; }
+    :where([data-slot="dialog-content"][class~="sm:max-w-2xl"]) { max-width: 42rem; }
+    :where([data-slot="dialog-content"][class~="sm:max-w-4xl"]) { max-width: 56rem; }
+  }
+
+  /* Corner close button ("absolute top-4 right-4"; top-4 is missing from index.css). */
+  :where([data-slot="dialog-content"] > button.absolute.right-4) {
+    top: 1rem;
+  }
+}
