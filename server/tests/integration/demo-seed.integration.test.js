@@ -15,7 +15,7 @@ const { seedDemoData, DEMO_EMAILS } = require('../../src/seeders/demoSeed');
 const { connectTestDb, disconnectTestDb } = require('../helpers/testDb');
 
 describe('Demo data seeder', () => {
-  const password = 'DemoPass#2026';
+  const password = 'Test@123';
 
   beforeAll(async () => {
     await connectTestDb();
@@ -30,15 +30,15 @@ describe('Demo data seeder', () => {
     await disconnectTestDb();
   });
 
-  test('does nothing without DEMO_PASSWORD', async () => {
-    delete process.env.DEMO_PASSWORD;
+  test('refuses a DEMO_PASSWORD shorter than 8 characters', async () => {
+    process.env.DEMO_PASSWORD = 'short';
     const res = await seedDemoData({ log: () => {} });
     expect(res.seeded).toBe(false);
     expect(await User.exists({ email: DEMO_EMAILS.parent })).toBeNull();
   });
 
   test("creates Hamza's full case once, and a second run changes nothing", async () => {
-    process.env.DEMO_PASSWORD = password;
+    delete process.env.DEMO_PASSWORD; // default password
     const first = await seedDemoData({ log: () => {} });
     expect(first.seeded).toBe(true);
 

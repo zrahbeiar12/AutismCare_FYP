@@ -7,8 +7,9 @@
  *  - The demo case is only created when the demo parent account does not exist yet; existing data is never
  *    changed or deleted.
  *
- * Runs at server start when SEED_DEMO_DATA=true (see server.js), or by hand: `npm run seed:demo`.
- * All demo accounts use DEMO_PASSWORD (required; at least 8 characters). Demo emails use example.com.
+ * Runs at every server start unless SEED_DEMO_DATA=false (see server.js), or by hand: `npm run seed:demo`.
+ * All demo accounts use DEMO_PASSWORD, or `Test@123` when it is not set. This password is public (it is in this
+ * repository): turn seeding off and change these accounts before any real patient uses the deployment.
  */
 const path = require('path');
 const mongoose = require('mongoose');
@@ -34,6 +35,9 @@ const DEMO = {
   lab: 'lab@example.com',
   admin: 'admin@example.com',
 };
+
+/** Expo demo password for every demo account (public — demo data only). */
+const DEFAULT_DEMO_PASSWORD = 'Test@123';
 
 const day = (n) => new Date(Date.now() - n * 864e5);
 
@@ -75,9 +79,9 @@ async function makeUser(data, password) {
 }
 
 async function seedDemoData({ log = console.log } = {}) {
-  const password = String(process.env.DEMO_PASSWORD || '');
+  const password = String(process.env.DEMO_PASSWORD || DEFAULT_DEMO_PASSWORD);
   if (password.length < 8) {
-    log('[demo-seed] skipped: set DEMO_PASSWORD (8+ characters) to create the demo accounts');
+    log('[demo-seed] skipped: DEMO_PASSWORD must be at least 8 characters');
     return { seeded: false };
   }
 
@@ -186,7 +190,7 @@ async function seedDemoData({ log = console.log } = {}) {
   return { seeded: true, caseIds: [String(hamza._id), String(zara._id)] };
 }
 
-module.exports = { seedDemoData, DEMO_EMAILS: DEMO };
+module.exports = { seedDemoData, DEMO_EMAILS: DEMO, DEFAULT_DEMO_PASSWORD };
 
 if (require.main === module) {
   require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });

@@ -185,8 +185,8 @@ const startServer = async () => {
 
     console.log('✅ MongoDB connected');
 
-    // Demo data for the expo (only when SEED_DEMO_DATA=true; never changes existing records).
-    if (String(process.env.SEED_DEMO_DATA || '').toLowerCase() === 'true') {
+    // Expo demo data: on by default, off with SEED_DEMO_DATA=false. Never changes existing records.
+    if (String(process.env.SEED_DEMO_DATA || 'true').toLowerCase() !== 'false') {
       try {
         const { seedDemoData } = require('./seeders/demoSeed.js');
         await seedDemoData();
