@@ -60,6 +60,14 @@ describe('Demo data seeder', () => {
     expect(before).toEqual({ users: 5, cases: 2, sessions: 4 });
   });
 
+  test('existing demo accounts with another password are reset to the demo password', async () => {
+    const parent = await User.findOne({ email: DEMO_EMAILS.parent }).select('+password');
+    parent.password = 'SomethingElse#99';
+    await parent.save({ validateModifiedOnly: true });
+    expect((await request(app).post('/api/auth/login').send({ email: DEMO_EMAILS.parent, password })).statusCode).toBe(401);
+    await seedDemoData({ log: () => {} });
+  });
+
   test('every demo account can log in', async () => {
     for (const email of Object.values(DEMO_EMAILS)) {
       const res = await request(app).post('/api/auth/login').send({ email, password });
