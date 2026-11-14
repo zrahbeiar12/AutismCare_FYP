@@ -72,6 +72,30 @@ async function ensureReferenceData(log) {
   }
 }
 
+/**
+ * Keep the demo logins working: existing demo accounts get the current demo password, a verified email and an
+ * approved status. Only the five demo example.com accounts are touched.
+ */
+async function syncDemoAccounts(password, log) {
+  let n = 0;
+  for (const email of Object.values(DEMO)) {
+    // eslint-disable-next-line no-await-in-loop
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) continue;
+    user.password = password; // hashed by the model's pre-save hook
+    user.isEmailVerified = true;
+    if (['clinician', 'therapist'].includes(user.role)) user.approvalStatus = 'active';
+    // eslint-disable-next-line no-await-in-loop
+    await user.save({ validateModifiedOnly: true });
+    if (user.role === 'lab') {
+      // eslint-disable-next-line no-await-in-loop
+      await LabApproval.updateOne({ labUserId: user._id }, { $set: { status: 'active' }, $setOnInsert: { labUserId: user._id } }, { upsert: true });
+    }
+    n += 1;
+  }
+  if (n) log(`[demo-seed] ${n} demo account(s) set to the demo password`);
+}
+
 async function makeUser(data, password) {
   const u = new User({ ...data, password, isEmailVerified: true, phoneNumber: data.phoneNumber || '+923001112200' });
   await u.save();
@@ -88,7 +112,8 @@ async function seedDemoData({ log = console.log } = {}) {
   await ensureReferenceData((m) => log(`[demo-seed] ${m}`));
 
   if (await User.exists({ email: DEMO.parent })) {
-    log('[demo-seed] demo case already present — nothing to do');
+    await syncDemoAccounts(password, log);
+    log('[demo-seed] demo case already present — demo logins refreshed');
     return { seeded: false };
   }
 
