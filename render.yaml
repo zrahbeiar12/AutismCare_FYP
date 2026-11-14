@@ -22,5 +22,11 @@ services:
         value: 8h
       - key: CLIENT_URL
         sync: false
+      # Expo demo data (Hamza's full case + one account per role). Turn off after the expo.
+      - key: SEED_DEMO_DATA
+        value: "true"
+      # Password for all demo accounts; set it in the Render dashboard, never in this file.
+      - key: DEMO_PASSWORD
+        sync: false
       - key: SERVER_URL
         sync: false

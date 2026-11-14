@@ -10,7 +10,8 @@
     "start:ci": "node src/server.js",
     "seed:activities": "node src/seeders/seedActivityTemplates.js",
     "test": "jest --runInBand --detectOpenHandles",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "seed:demo": "node src/seeders/demoSeed.js"
   },
   "keywords": [],
   "author": "",
