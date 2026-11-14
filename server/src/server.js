@@ -185,6 +185,16 @@ const startServer = async () => {
 
     console.log('✅ MongoDB connected');
 
+    // Demo data for the expo (only when SEED_DEMO_DATA=true; never changes existing records).
+    if (String(process.env.SEED_DEMO_DATA || '').toLowerCase() === 'true') {
+      try {
+        const { seedDemoData } = require('./seeders/demoSeed.js');
+        await seedDemoData();
+      } catch (err) {
+        console.error('[startup] demo seed failed:', err?.message || err);
+      }
+    }
+
     // Make sure the default organisation exists and every registered case has a sequential file number.
     try {
       const { getDefaultOrganization, backfillCaseFileNumbers } = require('./services/caseFileNumberService.js');
